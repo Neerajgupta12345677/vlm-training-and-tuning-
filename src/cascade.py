@@ -228,14 +228,23 @@ def adjudication_prompt(candidates: list[tuple[str, float]], times: list[float])
     return "\n".join(l for l in lines if l != "")
 
 
+def _norm(text: str) -> str:
+    """Collapse hyphens/underscores/multiple-spaces to single spaces so
+    'wrong-way-driving', 'wrong_way_driving' and 'wrong way driving' all
+    compare equal. MEASURED: the model answers with hyphens as often as
+    underscores despite the prompt showing underscored names verbatim."""
+    import re
+    return re.sub(r"[-_\s]+", " ", text.lower()).strip()
+
+
 def _search(text: str, candidates: list[str]) -> str | None:
-    low = text.lower()
+    low = _norm(text)
     for name in sorted(candidates, key=len, reverse=True):
-        if name.lower() in low:
+        if _norm(name) in low:
             return name
     for name in sorted(candidates, key=len, reverse=True):
         head = name.split("_or_")[0].replace("_", " ")
-        if head and head.lower() in low:
+        if head and _norm(head) in low:
             return name
     return None
 
@@ -353,8 +362,20 @@ class _Adjudicator:
               "Pick the single best match. Be conservative: if nothing unusual is "
               "visible, choose normal.")
 
-    def __init__(self, backend: str, model: str, url: str, timeout_s: float):
+    def __init__(self, backend: str, model: str, url: str, timeout_s: float,
+                fresh_load: bool = False):
         self.backend, self.model, self.url, self.timeout_s = backend, model, url, timeout_s
+        # MEASURED 2026-09-04: a full 34-video cascade run returned 15/15
+        # unparsed (degenerate repeated-token output) despite an isolated
+        # single-call retest of the IDENTICAL input succeeding cleanly moments
+        # earlier - same input, two outcomes, pointing at state accumulating
+        # across a long-running Ollama session rather than a logic bug.
+        # keep_alive=0 tells Ollama to unload the model immediately after each
+        # response, forcing a genuinely fresh load on the next call - cheap
+        # (no full server restart, no killing background processes) and a
+        # direct test of the session-accumulation hypothesis. Costs a model
+        # reload's worth of extra latency per call.
+        self.fresh_load = fresh_load
 
     def raw_choice(self, image: np.ndarray, prompt: str) -> str:
         from vlm_reason import encode_jpeg_b64
@@ -377,6 +398,8 @@ class _Adjudicator:
             ],
             "options": {"temperature": 0.2, "num_predict": 120, "repeat_penalty": 1.3},
         }
+        if self.fresh_load:
+            payload["keep_alive"] = 0
         r = requests.post(f"{self.url}/api/chat", json=payload, timeout=self.timeout_s)
         r.raise_for_status()
         return r.json()["message"]["content"]
@@ -430,6 +453,10 @@ def main() -> None:
                      "hardware that can actually serve it.")
     ap.add_argument("--montage-frames", type=int, default=4)
     ap.add_argument("--cell", type=int, default=448)
+    ap.add_argument("--fresh-load", action="store_true",
+                help="Force Ollama to unload/reload the model between every VLM call "
+                     "(keep_alive=0). Slower, but tests whether degenerate output is "
+                     "caused by state accumulating across a long session - see PROGRESS.md.")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default=r"C:\dvad\outputs\predictions_cascade.csv")
@@ -449,7 +476,7 @@ def main() -> None:
 
     clf = AppearanceClassifier(weights=args.weights, device=args.device)
     reasoner = None if args.backend == "none" else _Adjudicator(
-        args.backend, args.model, args.url, args.timeout)
+        args.backend, args.model, args.url, args.timeout, fresh_load=args.fresh_load)
 
     cfg = {"frames": args.frames, "evidence": args.evidence, "confident_p": args.confident_p,
            "confident_margin": args.confident_margin, "top_k": args.top_k,
