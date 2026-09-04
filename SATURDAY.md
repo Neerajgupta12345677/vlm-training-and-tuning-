@@ -202,6 +202,29 @@ string — check `features.traffic_flow_kmh_reliable` in the events jsonl.
 
 ---
 
+## 2b. ONE COMMAND for the demo
+
+Don't assemble flags in front of judges. This calibrates zones, runs the
+pipeline, writes the annotated video, and prints a readable results block:
+
+```
+%PY% src\demo.py --source <their_clip>
+%PY% src\demo.py --source <their_clip> --night
+%PY% src\demo.py --source <their_clip> --quick        :: first 300 frames
+```
+
+**Quote throughput from a `--no-video` run.** Encoding the annotated video costs
+more than the pipeline itself, so the default run understates you badly —
+measured on the 4K clip: 13.3 fps / 1.06 feeds-per-GPU with encoding vs
+**20.1 fps / 1.61** without. Show the video from the first run, quote the
+numbers from this one:
+```
+%PY% src\demo.py --source <their_clip> --no-video
+```
+
+Every step degrades gracefully — if zone calibration fails, the run still
+proceeds (unmapped areas are treated as lane-like and the rules still fire).
+
 ## 3. Demo script (what to actually show)
 
 1. **The annotated video.** Red box + alert banner on the stopped vehicle,
