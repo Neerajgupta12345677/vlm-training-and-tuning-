@@ -56,6 +56,15 @@ import ultralytics, torch
 print("ultralytics", ultralytics.__version__, "| torch", torch.__version__)
 print("gpu:", torch.cuda.get_device_name(0), torch.cuda.get_device_capability(0))
 assert torch.cuda.is_available(), "No GPU - set the accelerator."
+
+# Keep the ~2GB dataset OUT of /kaggle/working. Everything under /kaggle/working
+# becomes kernel output, so the first run made `kaggle kernels output` pull the
+# entire VisDrone dataset back down just to reach a 5MB weights file. /kaggle/temp
+# is scratch and is not part of the output.
+from ultralytics import settings
+os.makedirs("/kaggle/temp/datasets", exist_ok=True)
+settings.update({"datasets_dir": "/kaggle/temp/datasets", "sync": False})
+print("datasets_dir:", settings["datasets_dir"], "| telemetry sync:", settings["sync"])
 ''')
 
 code(r'''
@@ -125,7 +134,29 @@ t0 = time.time()
 for _ in range(20):
     m.predict(img, verbose=False, device=0)
 print(f"\n{1/((time.time()-t0)/20):.1f} fps at imgsz={CONFIG['imgsz']} on this GPU")
-print("\nDownload /kaggle/working/yolo26n_visdrone.pt and put it in C:\\dvad\\models\\")
+
+# Trim the output so pulling it back is fast: keep the weights, the results csv
+# and the plots; drop optimiser-laden epoch checkpoints and any stray dataset.
+import shutil
+from pathlib import Path
+
+keep = {"best.pt", "last.pt", "results.csv", "args.yaml"}
+for p in sorted(Path("/kaggle/working").rglob("*")):
+    if p.is_dir():
+        continue
+    if p.name in keep or p.suffix in {".png", ".jpg"} or p.name == "yolo26n_visdrone.pt":
+        continue
+    if p.suffix == ".pt" or "datasets" in p.parts:
+        try:
+            p.unlink()
+        except Exception:
+            pass
+for d in Path("/kaggle/working").rglob("datasets"):
+    shutil.rmtree(d, ignore_errors=True)
+
+total = sum(f.stat().st_size for f in Path("/kaggle/working").rglob("*") if f.is_file())
+print(f"\nkernel output trimmed to {total/1e6:.1f} MB")
+print("Pull it with: python src\\push_notebook.py --pull --slug dvad-yolo-visdrone")
 ''')
 
 md(r"""

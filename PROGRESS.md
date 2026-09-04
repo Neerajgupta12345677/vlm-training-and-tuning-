@@ -434,6 +434,34 @@ Also fixed while here: stopped_vehicle and slow_vehicle now share a dedup
 two different kind names; and slow severity is capped below the stopped range
 so a crawl never outranks a dead stop.
 
+### VisDrone YOLO fine-tune - TRAINED OK, but the notebook wasted the output
+Training completed on Kaggle T4 (~50 min, 30 epochs). Then pulling the result
+turned into a multi-GB download, because the notebook let ultralytics put the
+~2GB VisDrone dataset inside `/kaggle/working` - and EVERYTHING under
+/kaggle/working becomes kernel output. So `kaggle kernels output` dutifully
+pulled VisDrone2019-DET-train.zip (1.48GB) + test-dev (297MB) + val (78MB) +
+extracted images back down, just to reach a ~5MB best.pt.
+
+Fixed in `notebooks/build_yolo_notebook.py` for any re-train on the day:
+  * `settings.update({"datasets_dir": "/kaggle/temp/datasets"})` - /kaggle/temp
+    is scratch and is NOT part of kernel output.
+  * A trim step at the end that keeps best.pt / last.pt / results.csv / plots
+    and deletes epoch checkpoints and any stray dataset, then prints the final
+    output size so the mistake is visible next time.
+  * Telemetry `sync` also disabled inside the notebook.
+This matters if the organisers' data arrives and a re-train is wanted: without
+the fix, each pull costs several GB on venue wifi.
+
+Also note: `--aerial` config tuning already delivered the 3x recall win
+independently, so the fine-tuned weights are an upgrade, not a dependency.
+Compare before trusting them:
+  `python src\eval_aerial.py --limit 100 --imgsz 1024 --conf 0.15`
+  `python src\eval_aerial.py --limit 100 --imgsz 1024 --conf 0.15 --weights <new.pt>`
+REMINDER: VisDrone class ids are NOT COCO (0=pedestrian 1=people 2=bicycle
+3=car 4=van 5=truck 6=tricycle 7=awning-tricycle 8=bus 9=motor). Add `van` and
+the tricycles to VEHICLE_NAMES/VEHICLE_CLASSES before using these weights, or
+Stage 2 will silently ignore most vehicles.
+
 ## Remaining after the blockers clear
 - [ ] `distill_label.py` on the 15 harvested events (~$0.10 with claude-opus-5)
 - [ ] `build_kaggle_dataset.py --push`
