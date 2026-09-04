@@ -1,5 +1,56 @@
 # Progress Log (append short bullets only, newest at top)
 
+## Status: cascade adjudication built (src\cascade.py) - real bugs found and fixed, one open reliability issue documented, not yet a net score win.
+
+- **Why it exists, measured**: the appearance classifier's held-out VAL F1 is high on the
+  exact classes that score 0.0 on test - waterlogging_or_flood 0.914, vehicle_blocking_traffic
+  0.772, fighting_or_violence 0.680. The model knows these classes; plain top-1 argmax loses
+  them because they must beat all 11 competitors. Two attempts to fix this with per-class
+  thresholds already failed (see below). `cascade.py` tries a different fix: MobileNet screens
+  every clip cheaply; only CONTESTED clips (no confident winner) go to the VLM, which picks
+  among the classifier's own top-k named candidates rather than judging freely.
+- **Real bug #1, found and fixed**: `push_notebook.py`-style background cancellation via bash
+  `kill $BGPID` does NOT reliably terminate a Windows child process spawned from Git Bash - the
+  parent job dies, the actual python.exe survives orphaned. An early cancelled test run kept
+  running in the background for ~20 minutes, silently contending with every subsequent
+  diagnostic call to the same Ollama server, pinning the GPU at 100%/2.9GB and confounding an
+  entire chain of debugging (multi-image timeout, montage "degeneration", even a trivial
+  text-only ping timed out). Killed via PID from `nvidia-smi --query-compute-apps`, not `kill`.
+- **Real bug #2, found and fixed**: `parse_choice()` did a whole-text substring scan for a
+  candidate name, which is vulnerable to the SAME prompt-parroting failure mode already
+  documented elsewhere in this project. Captured example: the model answered `normal` correctly
+  on its own first line (exactly as instructed) then rambled into a paragraph that echoed
+  `wrong_way_driving` from the candidate list while describing something else - the naive
+  scanner picked up the echo and silently overrode the correct first-line answer. Fixed: the
+  first line is authoritative when it contains an unambiguous match; only a non-matching or
+  empty first line falls back to scanning the rest.
+- **Confirmed, not a bug**: the 2x2 composited temporal montage (four frames as one grid image)
+  reliably degenerates qwen2.5vl:3b via Ollama into repeated-token garbage ("@@@@...", the same
+  signature class CLAUDE.md already documents for a Kaggle-side NaN-logit case) - reproduced on
+  a genuinely clean, uncontended GPU, at every size tested 512-896px, with and without burned-in
+  timestamps. A true multi-image call (4 separate images, no compositing) times out outright
+  (>120s) on this 4GB/no-tensor-core card. Single natural frames work reliably. Conclusion:
+  temporal evidence to the VLM (the most promising architectural idea floated tonight) is not
+  currently servable on this hardware+backend - `cascade.py` defaults to `--evidence single`
+  and keeps `build_montage`/`--evidence montage` only for hardware that can actually run it.
+- **Open, unresolved**: with both real bugs fixed and single-frame evidence, a full 34-video
+  cascade run STILL returned 15/15 unparsed (same "@@@" pattern) - despite an isolated manual
+  retest of the identical function on the identical video succeeding cleanly moments earlier.
+  Same input, two different outcomes. This points to state accumulating across a long-running
+  Ollama session under repeated sequential multimodal calls (KV-cache or memory fragmentation
+  across calls), not a logic bug - stopped chasing further tonight rather than keep burning time
+  on serving-layer flakiness with no proven fix in hand. **Net effect: the cascade currently
+  performs IDENTICALLY to the classifier-only baseline (0.138 macro-F1 on this decision-rule
+  config) because every contested call falls back to top-1 by design** - which is the intended
+  fail-safe (§design note 2 in cascade.py), so the fallback did its job, but the intended gain
+  is not yet realised. This is also a real signal for the fine-tune's serving path: the same
+  Ollama backend is the eventual target for the LoRA adapter, so this reliability question needs
+  answering regardless before that adapter can be trusted at demo time.
+- **Not yet done**: retry with the Ollama server restarted between EVERY call (slow, ~5-10s
+  overhead per call, but would confirm/refute the session-accumulation hypothesis cheaply) or
+  switch the adjudicator to the base HF/PEFT path once that's validated (§15 of the user's
+  architecture doc) as an alternate serving route that doesn't share this failure mode.
+
 ## Status: per-class threshold calibration tried two ways, both worse than the global rule. SATURDAY.md rewritten for the classifier-centric pipeline.
 
 - Built `src\calibrate_thresholds.py`: per-class thresholds fitted on the classifier's held-out VAL split (365 videos, never trained on) instead of on the 34-video public test set. Hypothesis: `tune_appearance.py --per-class --cv`'s 0.230-vs-0.256 finding was about the TEST set being too small to fit 11 thresholds on, not about per-class thresholds being wrong in general — a 10x-larger, genuinely held-out set should fix that. **Measured result: macro-F1 0.126 on test, worse than either prior number.** The hypothesis was wrong, or at least not the dominant effect — most likely cause is real domain shift (organisers separate training-pool sources from the reserved test-set source at the video level; val is drawn from the training pool, so it isn't a faithful proxy for test's camera/scene distribution). Verdict: **use the global rule (`tune_appearance.py`, no `--per-class`). Two different per-class approaches have now failed for two different diagnosed reasons — do not try a third on the day.**
