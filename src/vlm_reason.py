@@ -91,11 +91,18 @@ OBSERVE_SYSTEM = (
     "Do not judge whether anything is moving - you cannot tell that from one still frame, "
     "and you are not being asked to.\n"
     "Report three things:\n"
-    "  hazard_visible: true only if you can actually SEE fire, smoke, a crash, spilled "
-    "debris, or a dense crowd gathering. Otherwise false.\n"
+    "  hazard_visible: true only if you can actually SEE one of the hazards listed "
+    "below. Otherwise false.\n"
     "  hazard_type: must be exactly one word from this list: fire, smoke, collision, "
-    "debris, crowd, none. Use 'none' for anything else, including ordinary people or "
-    "vehicles that are not one of those five hazards.\n"
+    "debris, flood, fight, crowd, none.\n"
+    "    fire/smoke  - visible flames or a smoke plume\n"
+    "    collision   - vehicles crashed into each other or overturned\n"
+    "    debris      - spilled load, rubble or objects lying in the roadway\n"
+    "    flood       - standing water or a submerged road surface\n"
+    "    fight       - people physically fighting\n"
+    "    crowd       - a dense crowd gathered where one would not be expected\n"
+    "  Use 'none' for anything else, including ordinary people, ordinary traffic, "
+    "parked vehicles, wet-but-passable road, or shadows. Ordinary is the common case.\n"
     "  surroundings: one short sentence saying where the boxed object sits (live traffic "
     "lane, hard shoulder, lay-by, parking area, junction) and what is immediately around it.\n"
     "Answer with a single JSON object and nothing else."
@@ -387,7 +394,14 @@ class VLMReasoner:
 # literally 'none'" - accepted it and fired a false 0.9-severity alert on a
 # normal crowd. A weak model's hallucinated noise must not be able to trigger
 # the escalation path; only these genuinely unambiguous visual hazards can.
-_REAL_HAZARDS = ("fire", "smoke", "collision", "crash", "debris", "crowd", "explosion")
+_REAL_HAZARDS = (
+    "fire", "smoke", "collision", "crash", "explosion", "debris", "crowd",
+    # Static conditions from the organisers' event list. These have no motion
+    # signature at all, so the tracker can never find them - the scene sweep
+    # plus these keywords is the only path by which they can be reported.
+    "flood", "water", "spill", "waterlog", "submerg", "drain",
+    "fight", "violence", "assault",
+)
 
 
 def _is_real_hazard(hazard_type: str) -> bool:

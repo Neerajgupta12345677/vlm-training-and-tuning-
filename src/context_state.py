@@ -275,6 +275,18 @@ class TriggerConfig:
     slow_min_box_diag_frac: float = 0.05
     crowd_count: int = 8            # live person tracks that constitute a crowd
     crowd_cooldown_s: float = 45.0
+    # Traffic congestion (organisers' event #1). Must be SUSTAINED - traffic
+    # stopped at a signal is not congestion, and firing on every red light is
+    # the false-alarm behaviour the brief explicitly warns against.
+    congestion_min_vehicles: int = 5
+    congestion_share: float = 0.6   # share of visible vehicles stationary
+    congestion_seconds: float = 12.0
+    congestion_cooldown_s: float = 60.0
+    # Periodic whole-frame check for STATIC conditions the tracker cannot see
+    # (flooding, debris, spills, fire). 0 disables. Only meaningful with a VLM
+    # backend - under --decision rules it produces nothing useful, so pipeline
+    # leaves it off there.
+    scene_sweep_seconds: float = 0.0
     wrong_way_tolerance_deg: float = 100.0
     wrong_way_min_speed: float = 0.3
     cooldown_seconds: float = 30.0
@@ -319,6 +331,9 @@ class ContextStateTracker:
         self.frames_seen = 0
         self.events_fired = 0
         self._last_crowd_s: float | None = None
+        self._congested_since_s: float | None = None
+        self._last_congestion_s: float | None = None
+        self._last_sweep_s: float | None = None
         self._now = 0.0
         self._recent_alerts: list[tuple[float, tuple[float, float, float, float], str]] = []
 
@@ -598,12 +613,136 @@ class ContextStateTracker:
             self.events_fired += 1
             events.append(crowd)
 
+        jam = self._check_congestion(det)
+        if jam is not None:
+            self.events_fired += 1
+            events.append(jam)
+
+        sweep = self._check_scene_sweep(det)
+        if sweep is not None:
+            self.events_fired += 1
+            events.append(sweep)
+
         # Drop tracks unseen for a while so memory stays flat on long videos.
         stale = [tid for tid, st in self.tracks.items() if det.timestamp_s - st.last_seen_s > 30.0]
         for tid in stale:
             del self.tracks[tid]
 
         return events
+
+    def _check_scene_sweep(self, det) -> Event | None:
+        """Periodically ask the VLM about the scene itself, with no tracked object.
+
+        Every rule above is derived from MOTION, which means an entire class of
+        the organisers' events is structurally invisible to them: water logging,
+        road spill and debris, an open drain. Their brief says so directly - "an
+        open drain is a static condition rather than an event". Fire and smoke
+        are appearance too, not motion.
+
+        So on a fixed interval we hand the VLM a whole frame and ask what it can
+        see. The tracker contributes nothing here and claims nothing; the verdict
+        comes entirely from the hazard allow-list in vlm_reason.combine(). Cheap
+        by construction: one call every `scene_sweep_seconds`, which at 12s is
+        well under 1% of frames.
+        """
+        cfg = self.cfg
+        if cfg.scene_sweep_seconds <= 0:
+            return None
+        if (self._last_sweep_s is not None
+                and det.timestamp_s - self._last_sweep_s < cfg.scene_sweep_seconds):
+            return None
+        self._last_sweep_s = det.timestamp_s
+
+        n_veh = sum(1 for st in self.tracks.values()
+                    if st.is_vehicle and st.last_seen_s >= det.timestamp_s - 1.0)
+        n_ppl = sum(1 for st in self.tracks.values()
+                    if st.is_person and st.last_seen_s >= det.timestamp_s - 1.0)
+        ctx = (
+            "Routine scene check, not triggered by any tracked object. "
+            f"{n_veh} vehicles and {n_ppl} people are currently tracked. "
+            "Report only what is visibly wrong with the scene itself - standing water, "
+            "spilled debris, fire or smoke, a collision, or people fighting. "
+            "Ordinary traffic and pedestrians are not hazards."
+        )
+        return Event(
+            frame_idx=det.frame_idx,
+            timestamp_s=det.timestamp_s,
+            kind="scene_sweep",
+            track_id=None,
+            class_name="scene",
+            zone_kind="scene",
+            bbox=(0.0, 0.0, 0.0, 0.0),  # whole frame; pipeline sends it unhighlighted
+            context=ctx,
+            features={"tracked_vehicles": n_veh, "tracked_people": n_ppl,
+                      "interval_s": cfg.scene_sweep_seconds},
+            # The tracker asserts nothing. Only a VLM-confirmed hazard from the
+            # allow-list can make this anomalous.
+            rule_anomalous=False,
+            rule_severity=0.0,
+        )
+
+    def _check_congestion(self, det) -> Event | None:
+        """Scene-level rule: traffic congestion, sustained.
+
+        This is event #1 on the organisers' list. The stopped_vehicle rule
+        already computes the jam signal but uses it only to SUPPRESS an alert
+        (a jam explains away a single stopped car). Congestion is a reportable
+        event in its own right, so it gets its own scene-level rule - but it
+        must be SUSTAINED, because traffic pausing at a signal is not congestion
+        and firing on every red light is exactly the false-alarm behaviour the
+        brief warns makes a system stop being used.
+        """
+        cfg = self.cfg
+        vehicles = [st for st in self.tracks.values()
+                    if st.is_vehicle and st.last_seen_s >= det.timestamp_s - 1.0]
+        if len(vehicles) < cfg.congestion_min_vehicles:
+            self._congested_since_s = None
+            return None
+
+        stopped = sum(1 for st in vehicles if st.norm_speed < cfg.stationary_speed)
+        share = stopped / len(vehicles)
+        if share < cfg.congestion_share:
+            self._congested_since_s = None
+            return None
+
+        if self._congested_since_s is None:
+            self._congested_since_s = det.timestamp_s
+            return None
+        held = det.timestamp_s - self._congested_since_s
+        if held < cfg.congestion_seconds:
+            return None
+        if (self._last_congestion_s is not None
+                and det.timestamp_s - self._last_congestion_s < cfg.congestion_cooldown_s):
+            return None
+        self._last_congestion_s = det.timestamp_s
+
+        xs = [(v.last_xyxy[0] + v.last_xyxy[2]) / 2 for v in vehicles]
+        ys = [(v.last_xyxy[1] + v.last_xyxy[3]) / 2 for v in vehicles]
+        ctx = (
+            f"{stopped} of {len(vehicles)} vehicles in view ({share * 100:.0f}%) have been "
+            f"stationary for {held:.0f}s in {phrase_zone(vehicles[0].zone_kind)}. "
+            f"This is sustained congestion rather than a single stopped vehicle."
+        )
+        return Event(
+            frame_idx=det.frame_idx,
+            timestamp_s=det.timestamp_s,
+            kind="traffic_congestion",
+            track_id=None,
+            class_name="vehicle",
+            zone_kind=vehicles[0].zone_kind,
+            bbox=(min(xs), min(ys), max(xs), max(ys)),
+            context=ctx,
+            features={
+                "vehicles_in_view": len(vehicles),
+                "stopped_vehicles": stopped,
+                "stopped_share": round(share, 3),
+                "sustained_s": round(held, 1),
+            },
+            # Reportable, but a lower grade of incident than a blocked lane or a
+            # crash - it needs an operator's awareness, not an emergency response.
+            rule_anomalous=True,
+            rule_severity=round(min(0.6, 0.35 + held / 120.0), 2),
+        )
 
     def _check_crowd(self, det) -> Event | None:
         """Scene-level rule: an unusual number of people gathered.
@@ -966,7 +1105,39 @@ def _selftest() -> int:
     if not any(e.kind == "wrong_way_vehicle" for e in wrong_way):
         failures.append("wrong-way vehicle never triggered")
 
+    # Congestion: 6 vehicles all stationary must fire (organisers' event #1),
+    # and the same 6 all flowing must NOT - firing on flowing traffic would be
+    # the false-alarm behaviour the brief warns about.
+    def _congestion_run(moving: bool) -> list[Event]:
+        trk = ContextStateTracker(zones=zones,
+                                  config=TriggerConfig(stop_seconds=1e9, loiter_seconds=1e9))
+        got: list[Event] = []
+        for f in range(260):  # 26s at 10fps, past the 12s sustain requirement
+            boxes, ids = [], []
+            for v in range(6):
+                x = 100 + v * 120 + (14 * f if moving else 0)
+                boxes.append([x, 300, x + 60, 340])
+                ids.append(v + 1)
+            det_ = _FakeDet(frame_idx=f, timestamp_s=f / fps,
+                            track_ids=np.array(ids), xyxy=np.array(boxes, dtype=float),
+                            class_names=["car"] * 6)
+            got.extend(trk.update(det_))
+        return [e for e in got if e.kind == "traffic_congestion"]
+
+    jam_events = _congestion_run(moving=False)
+    flow_events = _congestion_run(moving=True)
+    if not jam_events:
+        failures.append("sustained congestion never triggered (organisers' event #1)")
+    if flow_events:
+        failures.append(f"flowing traffic wrongly reported congestion {len(flow_events)}x")
+    if jam_events and jam_events[0].timestamp_s < 11.0:
+        failures.append(f"congestion fired at {jam_events[0].timestamp_s:.1f}s, "
+                        "before the 12s sustain window - would fire at every red light")
+
     print("=== Stage 2 self-test ===")
+    print(f"congestion events      : {len(jam_events)} jam / {len(flow_events)} flowing (expect >0 / 0)")
+    if jam_events:
+        print(f"congestion first at    : {jam_events[0].timestamp_s:.1f}s (sustain window 12s)")
     print(f"stopped-vehicle events : {len(stopped_events)}")
     print(f"moving-vehicle events  : {len(moving_events)} (expect 0)")
     print(f"wrong-way events       : {sum(1 for e in wrong_way if e.kind == 'wrong_way_vehicle')}")

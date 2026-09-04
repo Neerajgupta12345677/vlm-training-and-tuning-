@@ -94,6 +94,9 @@ def run_one(video: Path, args, truncate_events: bool = True) -> dict:
             crowd_count=args.crowd_count,
             wrong_way_tolerance_deg=args.wrong_way_tolerance,
             enable_slow_vehicle=args.enable_slow_vehicle,
+            # Pointless without a model to ask, so ignore it under --decision rules.
+            scene_sweep_seconds=(args.scene_sweep
+                                 if (args.decision != "rules" and not args.no_vlm) else 0.0),
             **({"duplicate_window_s": args.duplicate_window}
                if args.duplicate_window is not None else {}),
         ),
@@ -239,7 +242,11 @@ def run_one(video: Path, args, truncate_events: bool = True) -> dict:
                     print(f"  [{ev.timestamp_s:6.1f}s] SKIP    track {ev.track_id:>3} "
                           f"(Stage 3 queue full: {len(pending)})")
                 else:
-                    image_b64 = stage3.prepare_image(frame, ev.bbox)
+                    # A scene sweep is about the whole frame, so it must NOT be
+                    # highlighted - a magenta box would tell the model to look at
+                    # one spot when the point is to look everywhere.
+                    bbox = None if ev.kind == "scene_sweep" else ev.bbox
+                    image_b64 = stage3.prepare_image(frame, bbox)
                     if args.decision == "hybrid":
                         fut = vlm_pool.submit(stage3.observe_b64, image_b64)
                     else:  # "vlm" - the model decides everything (measured weakest)
@@ -390,6 +397,11 @@ def main() -> None:
                    help="A person stationary this long (outside a sidewalk) is loitering.")
     p.add_argument("--crowd-count", type=int, default=8,
                    help="Live person tracks in view above this count triggers crowd_density.")
+    p.add_argument("--scene-sweep", type=float, default=0.0,
+                   help="Ask the VLM about the whole frame every N seconds, independent of "
+                        "any tracked object. This is the ONLY path to static conditions the "
+                        "tracker cannot see - flooding, debris, spills, fire. Needs a VLM "
+                        "backend; 12 is a reasonable value. 0 = off.")
     p.add_argument("--enable-slow-vehicle", action="store_true",
                    help="Flag vehicles crawling relative to surrounding traffic. OFF by "
                         "default: its thresholds were tuned against one oblique clip and "
