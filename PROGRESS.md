@@ -290,6 +290,76 @@ cancels perspective (a distant car has both a smaller box and smaller pixel moti
 - [x] 15 candidate events harvested and ready for the teacher
 - [x] Annotated demo video at `C:\dvad\outputs\demo_annotated.mp4`
 
+### CONCURRENT-STREAMS TEST (2026-09-05) - closes the "feeds/GPU is inferred" gap
+Previous feeds-per-GPU numbers (4.41 @ 1080p, 1.19 @ 4K) were single-stream
+latency inverted, never actually run concurrently. Tested for real: N separate
+OS processes, each loading its own YOLO26n copy into its own CUDA context
+(worst-case, naive multi-process architecture - a shared-model server would do
+better), all hitting the same 1080p clip at --stride 2 (need 12.5 fps each).
+
+  N concurrent   per-stream fps        combined fps   verdict
+  1              55.1                  55.1           baseline
+  2              36.6 / 36.7           73.2           real-time, SUPER-linear combined
+  4              23.5-23.9             ~94.8          real-time, comfortable margin
+  6              18.5-18.7 (reproduced twice)  ~111.5  real-time, 49% margin - STABLE
+  7              ALL FAILED            -              CUDA OOM / system RAM OOM
+  8              ALL FAILED            -              cuDNN engine errors, "fatal:
+                                                        Memory allocation failure"
+
+**Verified: 6 concurrent real-time 1080p streams on one 4GB GTX 1650, reproduced
+on a clean re-run.** 7+ hits a genuine wall - both GPU VRAM and the 8GB system
+RAM budget (each OS process pays full torch+cv2+ultralytics import overhead).
+Caveat to state if asked: this is N independent processes each with its own
+model copy - the pessimistic case. A single process serving multiple streams
+from one loaded model would use far less VRAM per additional stream and likely
+scale further; that architecture was not what got measured here.
+Reproduce: launch N `pipeline.py --stride 2` processes via `Start-Process`
+(not PowerShell `Start-Job` - crashed the shell with a StackOverflowException
+at 8 concurrent jobs; that crash was the job-management layer, not the GPU).
+
+### RULE COVERAGE CLOSED + a real escalation-safety bug found (2026-09-05)
+Three rules had never touched real footage (`wrong_way_vehicle`, `loitering`,
+`crowd_density` w/ live VLM) - only the synthetic selftest. Also exposed that
+loiter_seconds/crowd_count/wrong_way_tolerance were not CLI flags at all
+(now added: `--loiter-seconds`, `--crowd-count`, `--wrong-way-tolerance`).
+
+- **loitering**: real footage (people-walking.mp4), threshold lowered to 3s to
+  get real triggers within the 13.6s clip. 5 real events, all with
+  person-shaped boxes (e.g. 35x130px) and dwell timing consistent with track
+  age - not tracker-ID-churn noise.
+- **wrong_way_vehicle**: built a zones file with `flow_deg` flipped 180 deg from
+  the real calibrated traffic direction. Real detected+tracked vehicles then
+  correctly triggered wrong-way (7 events, sev 0.9). Paired negative control
+  with the correct flow direction: 0 events. Clean positive/negative pair on
+  real YOLO+ByteTrack output, not synthetic FakeDet.
+- **crowd_density + live VLM (hybrid, real Ollama call)**: this is where it
+  found a real bug, not just a coverage gap.
+
+**BUG FOUND AND FIXED: false hazard escalation.** moondream, asked to observe
+an ordinary 16-person pedestrian scene, returned `hazard_type: "person"`. The
+old check in `combine()` was `hazard_type not in {"none","",  "n/a"}` - ANY
+other string counted as a real hazard, so this fired a false ANOMALOUS
+verdict at severity 0.9 on a completely normal crowd. Exactly the kind of
+failure that would produce a red ALERT banner over ordinary pedestrians live
+in front of judges.
+Fix (defense in depth, since models don't reliably follow prompt constraints
+alone - see the boolean-judgement finding above):
+  1. Tightened OBSERVE_SYSTEM to a closed vocabulary: hazard_type must be one
+     of fire/smoke/collision/debris/crowd/none. Removed "person on the road"
+     from the hazard list entirely - person_in_roadway is already a Stage 2
+     rule using tracker-measured lane context; letting the VLM independently
+     nominate "person" as a hazard is exactly what caused the bug.
+  2. Added `_is_real_hazard()` in vlm_reason.py - a hardcoded allow-list
+     (fire/smoke/collision/crash/debris/crowd/explosion) that `combine()` now
+     requires a substring match against, regardless of what the model outputs.
+     This is the layer that actually guarantees safety: even if a model emits
+     valid-JSON garbage, it cannot trigger escalation unless it names an actual
+     hazard.
+  Re-verified after the fix: same scene, same model, `anomalies: 0`, verdict
+  correctly holds at rule_severity 0.3 instead of a false 0.9.
+Full regression re-run clean after this fix: day/night/aerial ground truth all
+detected=1.0, IoU 0.94-0.98, 0 false positives; both selftests pass.
+
 ## Remaining after the blockers clear
 - [ ] `distill_label.py` on the 15 harvested events (~$0.10 with claude-opus-5)
 - [ ] `build_kaggle_dataset.py --push`

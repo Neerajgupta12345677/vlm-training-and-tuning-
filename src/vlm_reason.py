@@ -92,8 +92,10 @@ OBSERVE_SYSTEM = (
     "and you are not being asked to.\n"
     "Report three things:\n"
     "  hazard_visible: true only if you can actually SEE fire, smoke, a crash, spilled "
-    "debris, a person standing on the road, or a crowd gathering. Otherwise false.\n"
-    "  hazard_type: which of those you see, or 'none'.\n"
+    "debris, or a dense crowd gathering. Otherwise false.\n"
+    "  hazard_type: must be exactly one word from this list: fire, smoke, collision, "
+    "debris, crowd, none. Use 'none' for anything else, including ordinary people or "
+    "vehicles that are not one of those five hazards.\n"
     "  surroundings: one short sentence saying where the boxed object sits (live traffic "
     "lane, hard shoulder, lay-by, parking area, junction) and what is immediately around it.\n"
     "Answer with a single JSON object and nothing else."
@@ -379,6 +381,20 @@ class VLMReasoner:
         )
 
 
+# The only hazard categories allowed to trigger an escalation. Measured bug:
+# moondream reported hazard_type="person" for an ordinary pedestrian scene (a
+# crowd is not, by itself, a hazard), and the old check - "anything that isn't
+# literally 'none'" - accepted it and fired a false 0.9-severity alert on a
+# normal crowd. A weak model's hallucinated noise must not be able to trigger
+# the escalation path; only these genuinely unambiguous visual hazards can.
+_REAL_HAZARDS = ("fire", "smoke", "collision", "crash", "debris", "crowd", "explosion")
+
+
+def _is_real_hazard(hazard_type: str) -> bool:
+    t = (hazard_type or "").strip().lower()
+    return any(h in t for h in _REAL_HAZARDS)
+
+
 def combine(event_kind: str, rule_anomalous: bool, rule_severity: float,
             obs: SceneObservation) -> AnomalyVerdict:
     """Fuse Stage 2's deterministic verdict with the VLM's observation.
@@ -389,8 +405,10 @@ def combine(event_kind: str, rule_anomalous: bool, rule_severity: float,
       * The VLM can only ESCALATE, never silently overturn: a visible hazard
         promotes any event to anomalous at high severity. A model that says
         "nothing visible" cannot clear a stop that the tracker measured.
+      * Escalation requires hazard_type to match a fixed vocabulary
+        (_REAL_HAZARDS), not merely be non-empty - see the bug note above.
     """
-    if obs.hazard_visible and obs.hazard_type.lower() not in {"none", "", "n/a"}:
+    if obs.hazard_visible and _is_real_hazard(obs.hazard_type):
         return AnomalyVerdict(
             anomalous=True,
             severity=max(0.9, rule_severity),

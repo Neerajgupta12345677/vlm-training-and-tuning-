@@ -90,6 +90,9 @@ def run_one(video: Path, args, truncate_events: bool = True) -> dict:
             stop_seconds=args.stop_seconds,
             cooldown_seconds=args.cooldown,
             max_calls_per_track=args.max_calls_per_track,
+            loiter_seconds=args.loiter_seconds,
+            crowd_count=args.crowd_count,
+            wrong_way_tolerance_deg=args.wrong_way_tolerance,
             **({"duplicate_window_s": args.duplicate_window}
                if args.duplicate_window is not None else {}),
         ),
@@ -382,6 +385,13 @@ def main() -> None:
     p.add_argument("--stop-seconds", type=float, default=20.0)
     p.add_argument("--cooldown", type=float, default=30.0)
     p.add_argument("--max-calls-per-track", type=int, default=3)
+    p.add_argument("--loiter-seconds", type=float, default=25.0,
+                   help="A person stationary this long (outside a sidewalk) is loitering.")
+    p.add_argument("--crowd-count", type=int, default=8,
+                   help="Live person tracks in view above this count triggers crowd_density.")
+    p.add_argument("--wrong-way-tolerance", type=float, default=100.0,
+                   help="Degrees of heading deviation from a lane's calibrated flow before "
+                        "a vehicle counts as wrong-way.")
     p.add_argument("--duplicate-window", type=float, default=None,
                    help="Seconds during which an overlapping box will not re-alert. "
                         "Set 0 on HARVEST runs: suppressing repeat alerts is right for an "

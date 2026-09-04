@@ -149,12 +149,22 @@ set DVAD_FRAME_SEQ_FPS=10
 | `stopped_vehicle` | vehicle stationary > `--stop-seconds` in a live lane | anomalous, 0.55–0.85 (scales with dwell) |
 | ...but congested | most other vehicles are stopped too | **benign**, 0.2 — a jam is not an incident |
 | `person_in_roadway` | person in a driving lane | anomalous, 0.85 |
-| `loitering` | person stationary > `--loiter` seconds | 0.7 in a lane/restricted area, else 0.35 |
-| `wrong_way_vehicle` | heading deviates from the lane's calibrated flow | anomalous, 0.9 |
-| `crowd_density` | more live person tracks than `crowd_count` | benign 0.3 — the VLM decides if it's a queue or a problem |
+| `loitering` | person stationary > `--loiter-seconds` (default 25) | 0.7 in a lane/restricted area, else 0.35 |
+| `wrong_way_vehicle` | heading deviates > `--wrong-way-tolerance` deg from calibrated flow | anomalous, 0.9 |
+| `crowd_density` | more live person tracks than `--crowd-count` (default 8) | benign 0.3 — the VLM decides if it's a queue or a problem |
 
 The VLM can **escalate** any of these to 0.9 if it sees fire, smoke, a collision,
-debris or a crowd forming. It can never silently clear a stop the tracker measured.
+debris or a crowd forming — matched against a fixed allow-list in
+`vlm_reason._is_real_hazard()`, not accepted from free-form model output. That
+list is deliberate: moondream once reported `hazard_type: "person"` for an
+ordinary crowd scene, which a looser check ("anything but 'none'") would have
+escalated to a false alert. It can never silently clear a stop the tracker
+measured.
+
+All three thresholds (`--loiter-seconds`, `--crowd-count`,
+`--wrong-way-tolerance`) and all six rules have been run against real footage
+with real detections, not just the synthetic selftest — see PROGRESS.md
+"RULE COVERAGE CLOSED" for the positive/negative control results.
 
 ## 1e. Real-world distances (the car-length ruler)
 

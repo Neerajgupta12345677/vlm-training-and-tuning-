@@ -20,7 +20,15 @@ Constraints: small model · real time · economical across many feeds.
 | Throughput | **55.1 fps** | 26.6 fps detector / 15.1 fps full |
 | Per frame | **18.0 ms** | 40–61 ms |
 | Real time? | **4.4x headroom** | yes, at stride 2 |
-| **Feeds per GPU** | **4.41** | 1.19 |
+| **Feeds per GPU** | **4.41** (single-stream, inverted) | 1.19 |
+
+**Concurrent streams were actually run, not just projected.** 6 independent
+1080p processes on one 4GB GTX 1650, verified twice: all 6 real-time at
+18.5-18.7 fps each (49% margin over the 12.5 fps needed), ~111 combined fps.
+7+ genuinely exhausts VRAM/RAM (CUDA OOM, cuDNN errors) - that is the honest
+ceiling for this naive one-process-per-stream setup. A shared-model server
+process would very likely go further, since it pays the model's VRAM cost once
+instead of N times.
 | Frames reaching the VLM | **0.67%** | 0.19% |
 
 Hardware: one **GTX 1650, 4GB**, no Tensor Cores. Not a datacentre card.
@@ -111,6 +119,16 @@ The same principle runs through two more gates:
 Ask me about the false-positive hunt — raising recall 3x exposed four real bugs,
 including one where our own eval was under-counting false positives. Fixing the
 measurement came before fixing the number.
+
+**A fifth bug, found by actually running the hybrid VLM path on real crowd
+footage**: moondream returned `hazard_type: "person"` for an ordinary
+16-person scene, and the escalation check accepted any non-"none" string as a
+real hazard — a false ALERT at severity 0.9 on completely normal pedestrians.
+Fixed with a hardcoded hazard allow-list (fire/smoke/collision/debris/crowd)
+that the model's output must actually match, not just be non-empty. This is
+the same lesson as the boolean-judgement finding: never trust a small model's
+free-form output as a safety gate without validating it against a fixed
+vocabulary.
 
 ---
 
