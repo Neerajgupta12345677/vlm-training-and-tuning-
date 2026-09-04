@@ -82,21 +82,38 @@ if cc[0] < 7:
 ''')
 
 code(r'''
+# SMOKE_TEST=True caps the run to a small slice of data and few steps -
+# a ~10 min sanity check that the precision fix below actually holds before
+# spending the full ~75 min GPU budget again. Flip to False for the real run.
+SMOKE_TEST = False
+
 CONFIG = dict(
     base_model   = "unsloth/Qwen2.5-VL-3B-Instruct",
     load_in_4bit = True,     # QLoRA - fits comfortably on a single T4 (NOT P100)
     # 4371 real samples at effective batch 4 is ~1090 steps/epoch. 60 was sized
     # for the old n=15 synthetic set and would cover under 6% of one epoch.
-    max_steps    = 800,
-    batch_size   = 1,
+    max_steps    = 40 if SMOKE_TEST else 800,
+    # Only used when SMOKE_TEST - caps the dataset itself so a 40-step run
+    # doesn't just replay the first 40 samples of the same few classes.
+    smoke_n      = 60,
+    batch_size   = 1,        # vision models with dynamic resolution spike; 1x4 is known-good
     grad_accum   = 4,
-    lr           = 2e-4,
+    # LOWERED from 2e-4 - one of two real bugs behind tonight's loss=nan run.
+    # 2e-4 is not unusual for QLoRA in general, but it is on the aggressive
+    # side for a vision-language model, and it removed the margin that would
+    # otherwise have absorbed the OTHER bug (missing fp16 loss scaling, fixed
+    # below). Keeping both fixes rather than relying on either alone.
+    lr           = 1e-4,
+    max_grad_norm = 0.3,     # Unsloth's own recipe uses this for LoRA vision SFT
     lora_r       = 16,
     seed         = 3407,
     holdout      = 12,       # by-video val samples to eyeball after training
 )
 for k, v in CONFIG.items():
     print(f"{k:<14} {v}")
+if SMOKE_TEST:
+    print("\n*** SMOKE TEST MODE - small data, few steps, ~10 min. "
+          "Set SMOKE_TEST=False for the real run once this passes. ***")
 ''')
 
 code(r'''
@@ -122,6 +139,11 @@ def load_rows(path):
     return [json.loads(l) for l in Path(path).read_text(encoding="utf-8").splitlines() if l.strip()]
 
 rows = load_rows(TRAIN_JSONL)
+if SMOKE_TEST:
+    import random as _random
+    _random.Random(CONFIG["seed"]).shuffle(rows)
+    rows = rows[: CONFIG["smoke_n"]]
+    print(f"[smoke test] subsampled to {len(rows)} rows")
 # src/build_vlm_dataset.py emits rows already in conversation form:
 #   {image, video_id, class_name, messages:[user(image+text), assistant(json)]}
 # The label lives in `class_name`, so anomaly balance is derived from it rather
@@ -151,7 +173,19 @@ print("target    :", s0["messages"][-1]["content"][0]["text"][:200])
 ''')
 
 code(r'''
-from unsloth import FastVisionModel
+from unsloth import FastVisionModel, is_bfloat16_supported
+
+# THE root-cause fix for tonight's loss=nan run. A T4 is compute capability
+# 7.5 (Turing) with no native bfloat16 support, so Unsloth loads compute
+# weights as float16. float16 has a much smaller dynamic range than bf16 and
+# NEEDS automatic-mixed-precision loss scaling to stay numerically stable -
+# but that only turns on when SFTConfig is told fp16=True explicitly. Without
+# it (the previous run's config), HF Trainer runs plain float16 arithmetic
+# with NO loss-scaling safety net at all: every official Unsloth notebook
+# sets this pair, ours did not.
+USE_FP16 = not is_bfloat16_supported()
+USE_BF16 = is_bfloat16_supported()
+print(f"precision: fp16={USE_FP16} bf16={USE_BF16} (bf16 support: {is_bfloat16_supported()})")
 
 model, tokenizer = FastVisionModel.from_pretrained(
     CONFIG["base_model"],
@@ -217,14 +251,41 @@ print(f"train samples: {len(train_dataset)} | held out (by video): {len(held_row
 code(r'''
 from trl import SFTTrainer, SFTConfig
 from unsloth.trainer import UnslothVisionDataCollator
+from transformers import TrainerCallback
+import json as _json
 
 FastVisionModel.for_training(model)
+
+# Catches a diverging run at step 1, not step 800. Tonight's failed run only
+# reported "loss: nan" in the FINAL summary, after burning the full ~75 min
+# budget with no visibility into when it went wrong. This writes every step's
+# loss to disk immediately (so it survives even if the kernel is later killed)
+# and raises the instant a non-finite loss appears, rather than training on
+# through it.
+class NaNGuard(TrainerCallback):
+    def __init__(self, path="/kaggle/working/loss_trace.jsonl"):
+        self.f = open(path, "a", encoding="utf-8")
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if logs is None or "loss" not in logs:
+            return
+        loss = logs["loss"]
+        self.f.write(_json.dumps({"step": state.global_step, "loss": loss}) + "\n")
+        self.f.flush()
+        import math
+        if loss is None or math.isnan(loss) or math.isinf(loss):
+            self.f.write(_json.dumps({"step": state.global_step,
+                                      "FATAL": "non-finite loss, stopping"}) + "\n")
+            self.f.flush()
+            print(f"\n!!! non-finite loss ({loss}) at step {state.global_step} - stopping now !!!")
+            control.should_training_stop = True
 
 trainer = SFTTrainer(
     model         = model,
     tokenizer     = tokenizer,
     data_collator = UnslothVisionDataCollator(model, tokenizer, resize="min"),
     train_dataset = train_dataset,
+    callbacks     = [NaNGuard()],
     args = SFTConfig(
         per_device_train_batch_size = CONFIG["batch_size"],
         gradient_accumulation_steps = CONFIG["grad_accum"],
@@ -242,19 +303,32 @@ trainer = SFTTrainer(
         dataset_text_field    = "",
         dataset_kwargs        = {"skip_prepare_dataset": True},
         max_length            = 2048,
+        # THE fix for tonight's divergence - see the model-loading cell above.
+        fp16               = USE_FP16,
+        bf16               = USE_BF16,
+        max_grad_norm      = CONFIG["max_grad_norm"],
     ),
 )
 print("trainer ready")
+print(f"  fp16={USE_FP16} bf16={USE_BF16} lr={CONFIG['lr']} max_grad_norm={CONFIG['max_grad_norm']}")
 ''')
 
 code(r'''
-import time, torch
+import time, torch, math
 torch.cuda.reset_peak_memory_stats()
 t0 = time.time()
 stats = trainer.train()
-print(f"\ntrained in {(time.time()-t0)/60:.1f} min")
+elapsed_min = (time.time() - t0) / 60
+print(f"\ntrained in {elapsed_min:.1f} min")
 print(f"final loss   : {stats.training_loss:.4f}")
 print(f"peak VRAM    : {torch.cuda.max_memory_reserved()/1024**3:.2f} GB")
+if math.isnan(stats.training_loss) or math.isinf(stats.training_loss):
+    raise SystemExit(
+        "Training diverged again (non-finite final loss) even with fp16 loss "
+        "scaling and a lower LR. Check /kaggle/working/loss_trace.jsonl for the "
+        "exact step it broke at before trying a third fix blind."
+    )
+print("loss is finite - fine to proceed to the eval cell below.")
 ''')
 
 code(r'''
