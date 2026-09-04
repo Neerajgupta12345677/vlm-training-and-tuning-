@@ -1,5 +1,38 @@
 # Progress Log (append short bullets only, newest at top)
 
+## Status: Kaggle QLoRA run DIVERGED (final loss: nan). Do not use the adapter. Classifier-only (0.188, tuned) is the safe submission for now.
+
+- `dvad-ft-qwen25vl-ahc` completed on a T4 in 76.5 min (vs a 25-45 min estimate -
+  real per-step cost was ~2x guessed). `trained in 76.5 min / final loss: nan /
+  peak VRAM 5.99 GB`. The trainer's per-step loss table was not captured by
+  Kaggle's log streaming (`report_to="none"` plus tqdm not persisting), so the
+  exact divergence point is unknown - only the final NaN is confirmed.
+- The notebook's own held-out eval (12 by-video val samples, real captions,
+  never seen in training) confirms this is not a fluke: **parseable 7/12,
+  exact class match only 3/12**. By the later samples the "student" output is
+  indistinguishable from base-model confusion (fighting_or_violence mistaken
+  for traffic_accident repeatedly) - no evidence the LoRA weights learned
+  anything. Captured examples in the raw log at
+  `C:\dvad\models\kaggle_output\dvad-ft-qwen25vl-ahc.log`.
+- **Decision: do not merge/GGUF/wire this adapter into inference.** A NaN-loss
+  run's weights are noise at best, actively harmful at worst. `cascade.py`'s
+  adjudicator continues to use the BASE `qwen2.5vl:3b` via Ollama, which is
+  already what every score reported tonight used - nothing regresses from this.
+- Likely cause, not yet tested: `lr=2e-4` is a common default but is on the
+  aggressive side for 4-bit QLoRA on a vision-language model; the standard fix
+  is dropping to 5e-5 or 1e-4, possibly with explicit gradient-norm clipping.
+  Untried tonight - another ~75 min run with no per-step visibility into
+  whether it diverges again is a bad bet this close to the deadline. If
+  revisited, capture `logging_steps=1` output properly first (e.g. write loss
+  to a file every step from inside the training loop) so a NaN can be caught
+  and stopped early rather than discovered only at the end.
+- **This closes out the fine-tune path for tonight.** The classifier-only
+  submission (`tune_appearance.py`, no `--per-class`, current checkpoint) at
+  macro-F1 **0.188** is the proven, safe number. The cascade (classifier + base
+  VLM, both real bugs fixed earlier this evening) reaches 0.181-0.183 -
+  essentially tied, not yet a clear win. See PROGRESS.md entries below for the
+  full cascade debugging history.
+
 ## Status: cascade adjudication built (src\cascade.py) - real bugs found and fixed, one open reliability issue documented, not yet a net score win.
 
 - **Why it exists, measured**: the appearance classifier's held-out VAL F1 is high on the
