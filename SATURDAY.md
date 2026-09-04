@@ -220,11 +220,18 @@ string — check `features.traffic_flow_kmh_reliable` in the events jsonl.
 
 ## 4. If the wifi dies
 
-Nothing in the demo path needs the network:
+Nothing in the demo path needs the network - and this was actually tested, not
+just reasoned about: with all external traffic routed to an unroutable address
+(a real network blackhole, external DNS/HTTP genuinely unreachable), both
+`--decision rules --aerial` (24.8s, correct detection) and `--decision hybrid
+--backend ollama` (real 15.9s local inference call) completed correctly.
 - YOLO weights are cached in `C:\dvad\models\`
-- Ollama serves locally on `localhost:11434`
+- Ollama serves locally on `localhost:11434` - loopback traffic, never touches
+  the network hardware, works identically whether wifi is up or down
 - `--decision rules` needs no model at all
 - `--backend mock` runs the whole pipeline with zero weights
+- Ultralytics telemetry (`sync`) is disabled - one less thing that could try
+  to phone home and stall
 
 Only the *teacher labelling* and *Kaggle upload* need internet, and those are
 offline-prep steps, not demo steps.

@@ -360,6 +360,38 @@ alone - see the boolean-judgement finding above):
 Full regression re-run clean after this fix: day/night/aerial ground truth all
 detected=1.0, IoU 0.94-0.98, 0 false positives; both selftests pass.
 
+### OFFLINE DRY RUN (2026-09-05) - actually tested, not just reasoned about
+No admin rights in this session, so the real network adapter / firewall
+couldn't be touched (`New-NetFirewallRule` -> Access Denied). Used the closest
+achievable substitute: routed all external HTTP through an unroutable proxy
+(TEST-NET-1, 192.0.2.1) so any external call times out instead of succeeding,
+while `NO_PROXY=localhost,127.0.0.1` keeps loopback traffic working exactly as
+it does when real wifi is down (loopback never touches the network hardware).
+
+- Both selftests: instant, unaffected (4.1s combined) - confirms zero network
+  dependency, not just "no obvious network calls in the code."
+- **`--decision rules --aerial` on real footage: completed in 24.8s under full
+  external blackhole**, detected the anomaly identically to normal runs. This
+  is the actual demo command - proven to not depend on the internet at all.
+- **`--decision hybrid --backend ollama`: made a genuine local call (15.9s
+  latency, not instant) and completed correctly** with internet unreachable -
+  confirms Ollama's local-only architecture holds under real wifi-down
+  conditions, not just in theory.
+- Gotcha worth keeping: a naive global HTTP_PROXY without a NO_PROXY exclusion
+  incorrectly routes LOCALHOST traffic through the dead proxy too, which is
+  not how real wifi-down behaves (loopback never touches the network) - it
+  silently triggered the pipeline's own ollama-unreachable fallback to mock
+  (0.1ms latency, the literal hardcoded mock string). Good defensive fallback
+  behavior on our side, but it means an incautious version of this exact test
+  would have "proven" the wrong thing.
+- **Found and fixed a latent risk while at it**: `ultralytics` settings had
+  `"sync": true` (telemetry phone-home) by default. Disabled it - no reason to
+  carry that risk with unreliable venue wifi; it serves no purpose here.
+- NOT tested under blackhole (deliberately out of scope): distill_label.py,
+  push_notebook.py, setup_kaggle.py - these are pre-demo prep scripts that
+  explicitly require network by design (Groq/Kaggle), never part of the live
+  demo path, and SATURDAY.md already scopes them to "before Saturday."
+
 ## Remaining after the blockers clear
 - [ ] `distill_label.py` on the 15 harvested events (~$0.10 with claude-opus-5)
 - [ ] `build_kaggle_dataset.py --push`
