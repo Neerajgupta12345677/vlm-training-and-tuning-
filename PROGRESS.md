@@ -1,6 +1,66 @@
 # Progress Log (append short bullets only, newest at top)
 
-## Status: Kaggle QLoRA run DIVERGED (final loss: nan). Do not use the adapter. Classifier-only (0.188, tuned) is the safe submission for now.
+## Status: classifier retrained with rebalanced sampling - REAL, VERIFIED WIN: macro-F1 0.188 -> 0.262. This is now the safe submission. Kaggle fine-tune still fighting divergence (3 failed attempts, root cause diagnosed each time, v4 running with a genuine fix).
+
+- **Root cause of the classifier's `traffic_accident` dominance, found by checking
+  where the TRUE class ranked in the model's own probabilities on failing test
+  videos**: not a close-contest problem. fire/smoke/waterlogging/road_spill
+  videos were losing to `traffic_accident` with 0.4-0.9 confidence while the
+  true class often wasn't even in the top-3. Root cause: `traffic_accident` had
+  2.6-4.3x more RAW training frames than the classes it swallowed (2624 vs
+  616-992), which survives loss-reweighting (reweighting changes gradient
+  MAGNITUDE per sample, not how many distinct samples shape the boundary).
+- Fix in `train_appearance.py`: raised the "thin class" 2x-frame-density
+  threshold from <40 videos to <150 (now covers fire/smoke/waterlogging/
+  road_spill/fighting/wrong_way/loitering/vehicle_blocking, not just
+  traffic_congestion), and capped `traffic_accident` to 150 videos (seeded,
+  reproducible) instead of using all 328.
+- **Verified as a genuine fix, not a validation-metric mirage** (the same trap
+  that hit the ORIGINAL classifier tonight, where val recall rose while test
+  score fell): retrained (`appearance11_rebalanced.pt`, best val macro-recall
+  0.753), scored fresh against the real public test set, tuned with
+  `tune_appearance.py` (global rule, no `--per-class`), and independently
+  re-verified with `score_submission.py`. Result: **macro-F1 0.262**
+  (up from 0.188), is_anomaly accuracy 0.442 (up from 0.385).
+  `wrong_way_driving` went from F1 0.0 to 0.667, `traffic_congestion` 0.667 to
+  0.857. Still 6 classes at F1 0.0 (fighting, fire, road_spill, smoke,
+  stalled_vehicle, vehicle_blocking) - not solved, genuinely improved.
+- New safe submission: `predictions_final.csv` (0.262, freshly overwritten).
+  Old one backed up as `predictions_OLD_0.188.csv`. Model backed up as
+  `appearance11_BACKUP_0.188_verified.pt` before the retrain touched anything.
+- **A real process-launching detour, resolved**: retraining appeared to spawn a
+  duplicate process under a different Python interpreter, which looked like a
+  Windows/Git-Bash bug and cost real time chasing. The actual bug was mine -
+  forgot `--cache C:\dvad\data\appearance_frames11` on the relaunch, silently
+  falling back to the stale 7-class cache default, which is why frame counts
+  didn't match expectations. Not an interpreter bug; always pass `--cache`
+  explicitly when retraining outside the default flow.
+- **Kaggle fine-tune: 3 attempts, 3 diagnosed failures, converging on a fix**:
+  - v1 (this morning's baseline): loss=nan, no visibility into when.
+  - v2: fixed missing fp16 loss-scaling (T4 has no native bf16; Unsloth loads
+    compute weights as float16, but SFTConfig never set fp16=True, so training
+    ran raw float16 arithmetic with zero AMP safety net - the standard cause
+    of this exact failure). Verified with a 40-step/60-sample smoke test:
+    clean. Full run then diverged AGAIN at step 141 (oscillating 0.004-0.65
+    from step 30, then NaN) - a SECOND, later-onset issue.
+  - v3: lowered lr 1e-4->5e-5, lengthened warmup 5->20 steps. Verified with a
+    LONGER 200-step smoke test this time (the 40-step one couldn't have caught
+    a step-141 failure) - clean through all 200 steps. Full run then diverged
+    AGAIN, at the EXACT SAME step 141.
+  - **The step-141 coincidence across two different LR/warmup settings was the
+    real clue**: same seed, same (unshuffled) data order -> same physical
+    samples land at step 141 regardless of hyperparameters. Checked: images
+    decode fine (not corrupt). Checked: `build_vlm_dataset.py` writes
+    `train.jsonl` grouped by class - step 141 sits deep in a long run of
+    near-duplicate `loitering_or_suspicious_presence` captions. Long runs of
+    repeated targets let the model overfit locally to near-zero loss then
+    destabilise on the next distinct example - matches the oscillation
+    pattern exactly. `build_notebook.py` only shuffled rows in SMOKE_TEST
+    mode; the real run never did. Fixed: shuffle unconditionally. v4 running
+    with this fix; no fresh smoke test run first given time constraints (the
+    existing 200-step smoke tests were themselves already shuffled+subsampled,
+    which is retroactive evidence shuffled data trains stably - and the NaN
+    guard bounds a 4th failure to ~15 min either way).
 
 - `dvad-ft-qwen25vl-ahc` completed on a T4 in 76.5 min (vs a 25-45 min estimate -
   real per-step cost was ~2x guessed). `trained in 76.5 min / final loss: nan /

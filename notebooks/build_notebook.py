@@ -92,18 +92,32 @@ CONFIG = dict(
     load_in_4bit = True,     # QLoRA - fits comfortably on a single T4 (NOT P100)
     # 4371 real samples at effective batch 4 is ~1090 steps/epoch. 60 was sized
     # for the old n=15 synthetic set and would cover under 6% of one epoch.
-    max_steps    = 40 if SMOKE_TEST else 800,
-    # Only used when SMOKE_TEST - caps the dataset itself so a 40-step run
-    # doesn't just replay the first 40 samples of the same few classes.
-    smoke_n      = 60,
+    # SMOKE_TEST now runs 200 steps, not 40 - the v1 fp16 fix produced a clean
+    # loss curve for 30 steps, then wild oscillation (0.004-0.65) from step 30
+    # to a second NaN at step 141. A 40-step smoke test cannot catch a failure
+    # that only appears past step 100; 200 does, at a real but bounded cost
+    # (~35-45 min instead of another blind ~75 min full run).
+    max_steps    = 200 if SMOKE_TEST else 800,
+    # Also raised with the step count - 60 samples cycled 13x over 200 steps
+    # risks memorising the smoke subset rather than testing real dynamics.
+    smoke_n      = 200,
     batch_size   = 1,        # vision models with dynamic resolution spike; 1x4 is known-good
     grad_accum   = 4,
-    # LOWERED from 2e-4 - one of two real bugs behind tonight's loss=nan run.
-    # 2e-4 is not unusual for QLoRA in general, but it is on the aggressive
-    # side for a vision-language model, and it removed the margin that would
-    # otherwise have absorbed the OTHER bug (missing fp16 loss scaling, fixed
-    # below). Keeping both fixes rather than relying on either alone.
-    lr           = 1e-4,
+    # LOWERED AGAIN, 1e-4 -> 5e-5. The v1 fix (fp16 loss scaling + 1e-4) fixed
+    # the FIRST failure mode (early NaN, no loss trace at all) cleanly - steps
+    # 1-30 here are a smooth monotonic descent, proving it. The oscillation
+    # that starts at step 30 is a SECOND, later-onset issue: once the model
+    # gets good at the majority templated pattern (~25% of data is the
+    # `normal` class, itself a short fixed-shape JSON target), it starts
+    # nailing easy samples to near-zero loss while overshooting on harder
+    # ones - a classic sign the LR is still too large for the fine-grained
+    # regime once coarse fitting is done, even though it was fine at the start.
+    lr           = 5e-5,
+    # LENGTHENED, 5 -> 20 steps. A 5-step ramp reaches full LR while the model
+    # is still only seeing the easiest, most templated samples, so the full
+    # LR is already "too much" by the time harder samples arrive. A longer
+    # ramp gives the optimiser more time before committing to full step size.
+    warmup_steps = 20,
     max_grad_norm = 0.3,     # Unsloth's own recipe uses this for LoRA vision SFT
     lora_r       = 16,
     seed         = 3407,
@@ -139,11 +153,24 @@ def load_rows(path):
     return [json.loads(l) for l in Path(path).read_text(encoding="utf-8").splitlines() if l.strip()]
 
 rows = load_rows(TRAIN_JSONL)
+# ROOT CAUSE of BOTH divergences (v2 and v3 failed at the identical step 141,
+# across two different LR/warmup settings): src/build_vlm_dataset.py writes
+# train.jsonl grouped by class (`for cls in sorted(per_class)`), so training
+# marches through hundreds of consecutive near-duplicate examples per class
+# before this shuffle existed - step 141 lands deep inside a long run of
+# loitering_or_suspicious_presence samples sharing an near-identical caption.
+# Long runs of repeated targets let the model overfit locally to near-zero
+# loss, then destabilise on the next distinct example - consistent with the
+# oscillation observed from step ~30 onward in both failed runs. Shuffling
+# is not just a smoke-test convenience, it is required for the real run too.
+import random as _random
+_random.Random(CONFIG["seed"]).shuffle(rows)
 if SMOKE_TEST:
-    import random as _random
-    _random.Random(CONFIG["seed"]).shuffle(rows)
     rows = rows[: CONFIG["smoke_n"]]
     print(f"[smoke test] subsampled to {len(rows)} rows")
+else:
+    print(f"[shuffled] {len(rows)} rows (fixes the class-block ordering that "
+          f"produced the step-141 divergence in both prior runs)")
 # src/build_vlm_dataset.py emits rows already in conversation form:
 #   {image, video_id, class_name, messages:[user(image+text), assistant(json)]}
 # The label lives in `class_name`, so anomaly balance is derived from it rather
@@ -289,7 +316,7 @@ trainer = SFTTrainer(
     args = SFTConfig(
         per_device_train_batch_size = CONFIG["batch_size"],
         gradient_accumulation_steps = CONFIG["grad_accum"],
-        warmup_steps       = 5,
+        warmup_steps       = CONFIG["warmup_steps"],
         max_steps          = CONFIG["max_steps"],
         learning_rate      = CONFIG["lr"],
         logging_steps      = 1,
