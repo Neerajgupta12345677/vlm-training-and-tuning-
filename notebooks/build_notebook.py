@@ -85,13 +85,15 @@ code(r'''
 CONFIG = dict(
     base_model   = "unsloth/Qwen2.5-VL-3B-Instruct",
     load_in_4bit = True,     # QLoRA - fits comfortably on a single T4 (NOT P100)
-    max_steps    = 60,       # raise once you see the loss curve behave
+    # 4371 real samples at effective batch 4 is ~1090 steps/epoch. 60 was sized
+    # for the old n=15 synthetic set and would cover under 6% of one epoch.
+    max_steps    = 800,
     batch_size   = 1,
     grad_accum   = 4,
     lr           = 2e-4,
     lora_r       = 16,
     seed         = 3407,
-    holdout      = 3,        # samples withheld to eyeball after training
+    holdout      = 12,       # by-video val samples to eyeball after training
 )
 for k, v in CONFIG.items():
     print(f"{k:<14} {v}")
@@ -116,16 +118,36 @@ TRAIN_JSONL = Path(candidates[0])
 DATA_ROOT = TRAIN_JSONL.parent
 print("dataset:", DATA_ROOT)
 
-rows = [json.loads(l) for l in TRAIN_JSONL.read_text(encoding="utf-8").splitlines() if l.strip()]
-pos = sum(1 for r in rows if r["anomalous"])
-print(f"rows: {len(rows)}   class balance: {pos} anomalous / {len(rows) - pos} benign")
+def load_rows(path):
+    return [json.loads(l) for l in Path(path).read_text(encoding="utf-8").splitlines() if l.strip()]
+
+rows = load_rows(TRAIN_JSONL)
+# src/build_vlm_dataset.py emits rows already in conversation form:
+#   {image, video_id, class_name, messages:[user(image+text), assistant(json)]}
+# The label lives in `class_name`, so anomaly balance is derived from it rather
+# than a separate boolean - `normal` is the only benign class of the twelve.
+pos = sum(1 for r in rows if r["class_name"] != "normal")
+print(f"rows: {len(rows)}   balance: {pos} anomalous / {len(rows) - pos} normal")
 if pos in (0, len(rows)):
     print("WARNING: single-class dataset - the model cannot learn a decision boundary.")
+
+from collections import Counter
+print("\n--- per-class ---")
+for c, n in sorted(Counter(r["class_name"] for r in rows).items()):
+    print(f"  {c:<34} {n}")
+
+# The val split is held out BY VIDEO upstream. Holding out a slice of train
+# instead would put near-duplicate frames of one clip on both sides and report
+# an eval number that means nothing.
+VAL_JSONL = DATA_ROOT / "val.jsonl"
+val_rows = load_rows(VAL_JSONL) if VAL_JSONL.exists() else []
+print(f"\nval rows (held out by video): {len(val_rows)}")
+
 print("\n--- sample row ---")
-s = rows[0]
-print("image      :", s["image"])
-print("instruction:", s["instruction"][:200])
-print("target     :", s["target"])
+s0 = rows[0]
+print("image     :", s0["image"])
+print("class     :", s0["class_name"])
+print("target    :", s0["messages"][-1]["content"][0]["text"][:200])
 ''')
 
 code(r'''
@@ -167,21 +189,29 @@ code(r'''
 from PIL import Image
 
 def to_conversation(row):
-    """`system` and `instruction` came from src/vlm_reason.py via
-    build_kaggle_dataset.py, so the wording is byte-identical to what Stage 3
-    sends at inference. `target` is the exact JSON the student must emit."""
-    img = Image.open(DATA_ROOT / row["image"]).convert("RGB")
-    return {"messages": [
-        {"role": "system",    "content": [{"type": "text", "text": row["system"]}]},
-        {"role": "user",      "content": [{"type": "image", "image": img},
-                                          {"type": "text",  "text": row["instruction"]}]},
-        {"role": "assistant", "content": [{"type": "text",  "text": row["target"]}]},
-    ]}
+    """Rows already carry the full `messages` conversation from
+    src/build_vlm_dataset.py, whose instruction text and JSON target match the
+    submission schema in src/submission.py exactly - so the student's raw
+    output drops straight in with no parsing layer to drift.
 
-holdout_n = min(CONFIG["holdout"], max(0, len(rows) - 4))
-train_rows, held_rows = (rows[holdout_n:], rows[:holdout_n]) if holdout_n else (rows, [])
-train_dataset = [to_conversation(r) for r in train_rows]
-print(f"train samples: {len(train_dataset)} | held out: {len(held_rows)}")
+    The only thing missing on disk is the decoded image: the user turn holds a
+    bare {"type": "image"} placeholder, and Unsloth's collator needs a real PIL
+    object in that slot. Everything else passes through untouched.
+    """
+    img = Image.open(DATA_ROOT / row["image"]).convert("RGB")
+    msgs = []
+    for m in row["messages"]:
+        content = [({"type": "image", "image": img} if part.get("type") == "image" else part)
+                   for part in m["content"]]
+        msgs.append({"role": m["role"], "content": content})
+    return {"messages": msgs}
+
+train_dataset = [to_conversation(r) for r in rows]
+# held_rows comes from the upstream by-VIDEO val split, never a slice of train:
+# frames from one clip are near-duplicates, so holding out part of train would
+# report a number that means nothing.
+held_rows = val_rows[: CONFIG["holdout"]] if val_rows else []
+print(f"train samples: {len(train_dataset)} | held out (by video): {len(held_rows)}")
 ''')
 
 code(r'''
@@ -265,11 +295,9 @@ def predict(row, max_new_tokens=96):
     import torch
 
     img = Image.open(DATA_ROOT / row["image"]).convert("RGB")
-    messages = [
-        {"role": "system", "content": [{"type": "text", "text": row["system"]}]},
-        {"role": "user",   "content": [{"type": "image"},
-                                       {"type": "text", "text": row["instruction"]}]},
-    ]
+    # Reuse the stored conversation verbatim, minus the assistant turn, so the
+    # prompt at eval is byte-identical to the prompt seen in training.
+    messages = [m for m in row["messages"] if m["role"] != "assistant"]
     text = tokenizer.apply_chat_template(messages, add_generation_prompt=True)
     inputs = tokenizer(text=[text], images=[img], return_tensors="pt", padding=True).to("cuda")
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.float16):
@@ -282,23 +310,26 @@ probe = held_rows if held_rows else rows[:3]
 agree = parseable = 0
 for r in probe:
     raw = predict(r)
-    print(f"\n--- {r['image']}")
-    print(f"teacher : {r['target']}")
+    truth = r["messages"][-1]["content"][0]["text"]
+    print(f"\n--- {r['image']}  [{r['class_name']}]")
+    print(f"teacher : {truth}")
     print(f"student : {raw[:300]}")
     try:
         pred = json.loads(raw[raw.index("{"): raw.rindex("}") + 1])
         parseable += 1
-        if bool(pred.get("anomalous")) == bool(r["anomalous"]):
+        # Compare the CLASS, not just a boolean: the class is what the
+        # submission is scored on, and macro-F1 weights all twelve equally.
+        if pred.get("class_name") == r["class_name"]:
             agree += 1
-            print("        -> agrees with teacher")
+            print("        -> class matches")
         else:
-            print("        -> DISAGREES with teacher")
+            print(f"        -> MISMATCH (said {pred.get('class_name')!r})")
     except Exception as e:
         print(f"        -> unparseable ({type(e).__name__})")
 
-print(f"\nparseable: {parseable}/{len(probe)}   agreement: {agree}/{len(probe)}")
-print("(A tiny pseudo-label set will not give strong numbers - what matters is "
-      "that the JSON contract holds and the training loop completes.)")
+print(f"\nparseable: {parseable}/{len(probe)}   exact class match: {agree}/{len(probe)}")
+print("An unparseable output is unusable downstream no matter how good the class "
+      "is, so the JSON contract holding on every sample matters most here.")
 ''')
 
 md(r"""

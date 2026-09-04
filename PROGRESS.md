@@ -14,9 +14,11 @@
 - AHC zip extracted to `C:\dvad\data\ahc\` (NOT OneDrive). Layout matches the docs. Pack is incomplete vs videos.csv: test missing T030.mp4 (33/34 on disk); train videos sparse except fire/smoke/flood/wrong_way. Official `is_anomaly` is lowercase `true`/`false` — writer now matches. Distill labels: `python src\run_ahc_dataset.py --data_dir C:\dvad\data\ahc --extract-labels-only --out C:\dvad\data\ahc_distill_labels.jsonl` -> **3173 rows, 12 classes, 100% have description_summary**. Public test score in progress (`--split test`, rules+aerial, stock YOLO). Next: `score_submission.py` once that finishes; hunt remaining zip parts if any.
 
 ### BLOCKERS
-- [ ] **Kaggle Phone Verification** (Settings -> Phone Verification). THE ONLY ONE LEFT.
-      Not needed for upload (that works), but REQUIRED to select a GPU accelerator
-      on a notebook. It can lag - do not leave it to Saturday morning.
+- [x] **Kaggle Phone Verification** - user confirmed done 2026-09-04 evening. Auth still
+      verified working (`setup_kaggle.py --verify-only`). GPU-accelerator selection itself
+      not yet exercised (the API has no queryable flag for phone-verification status) -
+      the real test is pushing a notebook with T4 requested and confirming it runs; do
+      that before relying on it for the VLM LoRA path.
 
 ### !!! BIGGEST FINDING OF THE BUILD: the DETECTOR is the weak link on aerial !!!
 Tested stock YOLO26n against real aerial imagery (VisDrone val, 100 images,

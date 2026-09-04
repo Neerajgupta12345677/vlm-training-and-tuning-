@@ -33,7 +33,7 @@ from pathlib import Path
 
 from common import DATA_DIR
 
-DEFAULT_CACHE = Path(r"C:\dvad\data\appearance_frames")
+DEFAULT_CACHE = Path(r"C:\dvad\data\appearance_frames11")  # 11-class cache; the 7-class one is superseded (it lumped loitering/wrong_way/congestion/blocking into normal and is one revision behind)
 DEFAULT_LABELS = Path(r"C:\dvad\data\ahc_distill_labels.jsonl")
 
 INSTRUCTION = (
