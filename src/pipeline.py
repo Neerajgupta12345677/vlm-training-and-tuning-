@@ -53,10 +53,16 @@ def find_videos(data_dir: Path) -> list[Path]:
     return videos + seq_dirs
 
 
+def _tid(ev) -> str:
+    """Track id for display. Scene-level events (crowd, congestion, sweep) have
+    none, and f"{None:>3}" is a TypeError - which crashed the harvest path and
+    the Stage-3 queue-full path, both of which are documented commands."""
+    return "  -" if ev.track_id is None else str(ev.track_id)
+
+
 def _log_verdict(ev, verdict, ms: float) -> None:
     flag = "ANOMALY" if verdict.anomalous else "benign "
-    # Scene-level events (crowd density) have no track id.
-    tid = f"{ev.track_id:>3}" if ev.track_id is not None else "  -"
+    tid = f"{_tid(ev):>3}"
     print(f"  [{ev.timestamp_s:6.1f}s] {flag} track {tid} {ev.class_name:<10} "
           f"{ev.kind:<18} sev={verdict.severity:.2f} ({ms:6.0f}ms) {verdict.reason}")
 
@@ -83,6 +89,7 @@ def run_one(video: Path, args, truncate_events: bool = True) -> dict:
         imgsz=args.imgsz,
         fps=meta.fps,
         stride=args.stride,
+        compensate_ego_motion=args.ego_motion,
     )
     stage2 = ContextStateTracker(
         zones=ZoneMap.load(args.zones, default_kind=args.default_zone),
@@ -239,7 +246,7 @@ def run_one(video: Path, args, truncate_events: bool = True) -> dict:
                 # anomaly defined by a 20-second dwell.
                 if len(pending) >= args.vlm_queue:
                     dropped += 1
-                    print(f"  [{ev.timestamp_s:6.1f}s] SKIP    track {ev.track_id:>3} "
+                    print(f"  [{ev.timestamp_s:6.1f}s] SKIP    track {_tid(ev):>3} "
                           f"(Stage 3 queue full: {len(pending)})")
                 else:
                     # A scene sweep is about the whole frame, so it must NOT be
@@ -255,7 +262,7 @@ def run_one(video: Path, args, truncate_events: bool = True) -> dict:
                     vlm_calls += 1
                     continue  # row is written when the future completes
             else:
-                print(f"  [{ev.timestamp_s:6.1f}s] EVENT   track {ev.track_id:>3} {ev.class_name:<10} "
+                print(f"  [{ev.timestamp_s:6.1f}s] EVENT   track {_tid(ev):>3} {ev.class_name:<10} "
                       f"{ev.kind:<18} (harvested, no verdict)")
 
             append_jsonl(events_path, row)
@@ -381,6 +388,10 @@ def main() -> None:
                         "VisDrone, stock settings (640/0.25) recall only 0.152 of aerial "
                         "objects and 0.008 of small ones; this lifts overall recall to "
                         "0.413 and still runs at 41 fps on 1080p.")
+    p.add_argument("--no-ego-motion", dest="ego_motion", action="store_false", default=True,
+                   help="Disable camera-motion compensation. Only sensible for a genuinely "
+                        "fixed camera - on drone footage this makes every dwell-based rule "
+                        "silently stop firing. Kept so the A/B stays measurable.")
     p.add_argument("--night", action="store_true",
                    help="Low-light preset: drops --conf to 0.20. Measured on simulated "
                         "night footage, that recovers detection counts to ABOVE the "

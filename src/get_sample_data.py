@@ -172,21 +172,41 @@ def inject_hazard(video: Path, args) -> Path:
     rx = int(meta.width * args.hazard_scale)
     ry = int(rx * 0.45)  # foreshortened, as a patch on the ground would be
 
-    yy, xx = np.mgrid[0:meta.height, 0:meta.width]
-    d = ((xx - cx) / max(rx, 1)) ** 2 + ((yy - cy) / max(ry, 1)) ** 2
-    mask = np.clip(1.0 - d, 0.0, 1.0) ** 1.5  # soft-edged falloff
     rng = np.random.default_rng(7)
-    mask *= 0.75 + 0.25 * rng.random(mask.shape)  # break up the perfect ellipse
+    yy, xx = np.mgrid[0:meta.height, 0:meta.width]
+
+    def blob(bx, by, brx, bry, power=1.4):
+        d = ((xx - bx) / max(brx, 1)) ** 2 + ((yy - by) / max(bry, 1)) ** 2
+        return np.clip(1.0 - d, 0.0, 1.0) ** power
+
+    if args.hazard == "flood":
+        # Standing water lies flat on the road: wide, shallow, hugging the surface.
+        mask = blob(cx, cy, rx * 1.3, ry * 0.9)
+    else:
+        # Smoke and fire RISE. A flat ellipse read as sun glare on tarmac in the
+        # first attempt; a stack of offset blobs growing upward and outward reads
+        # as a plume, which is what the control has to be unambiguous about.
+        mask = np.zeros((meta.height, meta.width), np.float32)
+        for i in range(6):
+            t = i / 5.0
+            bx = cx + int(rx * 0.5 * (t ** 1.5) * rng.uniform(-1.0, 1.0))
+            by = cy - int(ry * 2.6 * t)                  # climb
+            br = rx * (0.45 + 0.75 * t)                  # widen with height
+            mask = np.maximum(mask, blob(bx, by, br, br * 0.75) * (1.0 - 0.25 * t))
+    # Texture so it is not a smooth mathematical shape.
+    mask *= 0.70 + 0.30 * rng.random(mask.shape)
+    mask = cv2.GaussianBlur(mask, (0, 0), max(rx, ry) * 0.10)
+    mask = np.clip(mask * 1.35, 0.0, 1.0)
     mask3 = np.dstack([mask] * 3).astype(np.float32)
 
     colour = {
-        "smoke": (205.0, 205.0, 200.0),   # BGR, near-neutral grey plume
-        "fire": (40.0, 120.0, 240.0),     # BGR -> orange
-        "flood": (150.0, 120.0, 85.0),    # BGR -> muddy brown-grey standing water
+        "smoke": (238.0, 238.0, 236.0),   # BGR, near-white so it reads against tarmac
+        "fire": (30.0, 105.0, 250.0),     # BGR -> saturated orange
+        "flood": (135.0, 105.0, 70.0),    # BGR -> muddy brown standing water
     }[args.hazard]
     layer = np.zeros((meta.height, meta.width, 3), np.float32)
     layer[:] = colour
-    alpha = {"smoke": 0.80, "fire": 0.85, "flood": 0.70}[args.hazard]
+    alpha = {"smoke": 0.97, "fire": 0.95, "flood": 0.78}[args.hazard]
 
     cap = cv2.VideoCapture(str(video))
     written = 0
@@ -233,6 +253,56 @@ def inject_hazard(video: Path, args) -> Path:
     return out_path
 
 
+def inject_camera_motion(video: Path, args) -> Path:
+    """Simulate a moving drone by panning a crop window over the source frame.
+
+    Everything measured up to now used an effectively bolted-down camera, which
+    is the one case where image-plane motion equals world motion. A drone pans,
+    drifts and rotates. This turns real footage into moving-camera footage by
+    sliding (and optionally rotating) a sub-window across the full-resolution
+    frame - so the content stays real while the viewpoint moves, which is
+    exactly the condition ego-motion compensation exists for.
+    """
+    meta = probe_video(video)
+    cw = int(meta.width * args.motion_crop)
+    ch = int(meta.height * args.motion_crop)
+    # Room to move: the window travels within the leftover margin.
+    mx, my = meta.width - cw, meta.height - ch
+    if mx <= 0 or my <= 0:
+        raise SystemExit("--motion-crop must be < 1.0 to leave room to pan")
+
+    out_path = Path(args.out) if args.out else DATA_DIR / f"{video.stem}_moving.mp4"
+    writer = cv2.VideoWriter(str(out_path), cv2.VideoWriter_fourcc(*"mp4v"),
+                             meta.fps, (cw, ch))
+    cap = cv2.VideoCapture(str(video))
+    written = 0
+    while True:
+        ok, frame = cap.read()
+        if not ok or (args.max_frames and written >= args.max_frames):
+            break
+        t = written / max(meta.fps, 1e-6)
+        # Sinusoidal pan on both axes at different periods, plus a slow drift,
+        # so it looks like a hovering drone rather than a dolly on rails.
+        fx = 0.5 + 0.5 * np.sin(2 * np.pi * t / args.motion_period)
+        fy = 0.5 + 0.5 * np.sin(2 * np.pi * t / (args.motion_period * 1.7) + 1.1)
+        x0 = int(np.clip(mx * fx, 0, mx))
+        y0 = int(np.clip(my * fy, 0, my))
+        crop = frame[y0:y0 + ch, x0:x0 + cw]
+        if args.motion_rotate_deg:
+            ang = args.motion_rotate_deg * np.sin(2 * np.pi * t / (args.motion_period * 2.3))
+            M = cv2.getRotationMatrix2D((cw / 2, ch / 2), float(ang), 1.0)
+            crop = cv2.warpAffine(crop, M, (cw, ch), borderMode=cv2.BORDER_REFLECT)
+        writer.write(crop)
+        written += 1
+    cap.release()
+    writer.release()
+    print(f"[ok] moving-camera clip : {out_path} ({written} frames, {cw}x{ch})")
+    print(f"[ok] pan period {args.motion_period}s, rotation +/-{args.motion_rotate_deg}deg")
+    print("[note] the anomaly's pixel position now MOVES, so score this clip on "
+          "whether the rule fires at all, not on a fixed ground-truth IoU.")
+    return out_path
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Fetch sample footage and build a ground-truth anomaly clip.")
     p.add_argument("--download", action="store_true", help="Download a supervision sample video.")
@@ -245,6 +315,13 @@ def main() -> None:
     p.add_argument("--hazard-x", type=float, default=0.45, help="Centre x as a frame fraction.")
     p.add_argument("--hazard-y", type=float, default=0.62, help="Centre y as a frame fraction.")
     p.add_argument("--hazard-scale", type=float, default=0.16, help="Radius as a frame fraction.")
+    p.add_argument("--inject-camera-motion", action="store_true",
+                   help="Pan a crop window over --source to simulate a moving drone.")
+    p.add_argument("--motion-crop", type=float, default=0.72,
+                   help="Crop window size as a fraction of the frame (<1 leaves pan room).")
+    p.add_argument("--motion-period", type=float, default=8.0, help="Pan period in seconds.")
+    p.add_argument("--motion-rotate-deg", type=float, default=2.5,
+                   help="Peak rotation in degrees (0 for pure translation).")
     p.add_argument("--source", default=None, help="Video to inject into.")
     p.add_argument("--data_dir", default=str(DATA_DIR), help="Where videos live.")
     p.add_argument("--out", default=None)
@@ -254,7 +331,8 @@ def main() -> None:
     p.add_argument("--device", default="cuda")
     args = p.parse_args()
 
-    if not args.download and not args.inject and not args.inject_hazard:
+    if not (args.download or args.inject or args.inject_hazard
+            or args.inject_camera_motion):
         p.print_help()
         return
 
@@ -269,6 +347,10 @@ def main() -> None:
         if video is None:
             raise SystemExit("--inject-hazard needs --source (or run with --download first)")
         inject_hazard(video, args)
+    if args.inject_camera_motion:
+        if video is None:
+            raise SystemExit("--inject-camera-motion needs --source")
+        inject_camera_motion(video, args)
 
 
 if __name__ == "__main__":

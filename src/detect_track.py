@@ -17,6 +17,8 @@ import numpy as np
 import supervision as sv
 from ultralytics import YOLO
 
+from ego_motion import EgoMotionEstimator
+
 from common import MODELS_DIR, OUTPUTS_DIR, iter_frames, iter_frames_threaded, probe_video
 
 # Class filtering is by NAME, resolved against whatever weights are loaded.
@@ -99,6 +101,10 @@ class FrameDetections:
     class_names: list[str]
     confidences: np.ndarray
     frame_diag: float = 0.0  # lets Stage 2 judge object size relative to the frame
+    # Maps a current-frame point into a camera-motion-stabilised reference frame.
+    # None means no compensation is active, and Stage 2 uses raw image coords.
+    to_reference: object = None
+    camera_is_moving: bool = False
 
     def __len__(self) -> int:
         return len(self.track_ids)
@@ -115,6 +121,10 @@ class Stage1Tracker:
     classes: list[int] = field(default_factory=lambda: list(DEFAULT_CLASSES))
     fps: float = 30.0
     stride: int = 1
+    # On by default: a drone camera moves, and without compensation every
+    # dwell-based rule silently stops firing. Disable only for a fixed camera
+    # where the extra few ms/frame is not worth it.
+    compensate_ego_motion: bool = True
     # Class-agnostic NMS. At the low confidence aerial footage needs (0.10), one
     # vehicle routinely yields several overlapping boxes under different labels -
     # measured: a single stopped truck came back as truck+truck+bus, became three
@@ -134,8 +144,16 @@ class Stage1Tracker:
         # buffer. Conflating them makes tracks expire wrongly under --stride.
         self.tracker = sv.ByteTrack(frame_rate=max(1, int(round(self.fps / max(self.stride, 1)))))
         self.last_detections: sv.Detections | None = None
+        self.ego: EgoMotionEstimator | None = (
+            EgoMotionEstimator() if self.compensate_ego_motion else None
+        )
 
     def process(self, frame_idx: int, frame: np.ndarray) -> FrameDetections:
+        # Estimate camera motion BEFORE detection so Stage 2 can express this
+        # frame's positions in a stabilised frame.
+        if self.ego is not None:
+            self.ego.update(frame)
+
         result = self.model.predict(
             frame,
             verbose=False,
@@ -162,6 +180,8 @@ class Stage1Tracker:
             class_names=names,
             confidences=dets.confidence if dets.confidence is not None else np.empty(0),
             frame_diag=float(np.hypot(frame.shape[1], frame.shape[0])),
+            to_reference=(self.ego.to_reference if self.ego is not None else None),
+            camera_is_moving=(self.ego.camera_is_moving if self.ego is not None else False),
         )
 
 

@@ -564,8 +564,25 @@ class ContextStateTracker:
             st.last_xyxy = (x1, y1, x2, y2)
             st.box_diag = diag
             st.frame_diag = getattr(det, "frame_diag", 0.0) or st.frame_diag
-            st.history.append((det.timestamp_s, cx, cy, diag))
-            st.zone_kind, zone = self.zones.lookup(cx, cy)
+
+            # Motion history is kept in a CAMERA-STABILISED frame. Without this,
+            # every dwell and speed figure is contaminated by the drone's own
+            # movement: a parked car on a panning drone has non-zero image
+            # velocity, so the stationary latch never engages and the flagship
+            # rule silently reports nothing. Positions here are world-ish, so
+            # all the arithmetic below is unchanged.
+            to_ref = getattr(det, "to_reference", None)
+            if to_ref is not None:
+                rx, ry = to_ref(cx, cy)
+            else:
+                rx, ry = cx, cy
+            st.history.append((det.timestamp_s, rx, ry, diag))
+            # Zones are fixed polygons in the calibration frame's coordinates, so
+            # the query point must be mapped back into that frame. Otherwise one
+            # drone translation silently points every polygon at the wrong piece
+            # of road - and a mislabelled zone never errors, it just reasons
+            # confidently about the wrong place.
+            st.zone_kind, zone = self.zones.lookup(rx, ry)
             st.zone_name = zone.name if zone else None
             self._update_kinematics(st)
 
@@ -575,13 +592,15 @@ class ContextStateTracker:
             # instantaneous speed let detector jitter reset a real 19s dwell.
             # "Stationary" requires stillness in BOTH the image plane and depth.
             depth_moving = st.scale_rate_med >= self.cfg.scale_rate_moving
+            # Anchor is stored in the same stabilised frame as the history, or
+            # the drift check would measure the drone's motion, not the vehicle's.
             if st.stationary_since_s is None:
                 if st.norm_speed < self.cfg.stationary_speed and not depth_moving:
                     st.stationary_since_s = det.timestamp_s
-                    st.stop_anchor = (cx, cy)
+                    st.stop_anchor = (rx, ry)
             else:
-                anchor = st.stop_anchor or (cx, cy)
-                drift = float(np.hypot(cx - anchor[0], cy - anchor[1])) / max(diag, 1e-6)
+                anchor = st.stop_anchor or (rx, ry)
+                drift = float(np.hypot(rx - anchor[0], ry - anchor[1])) / max(diag, 1e-6)
                 if drift > self.cfg.move_release_bodylengths or depth_moving:
                     st.stationary_since_s = None
                     st.stop_anchor = None

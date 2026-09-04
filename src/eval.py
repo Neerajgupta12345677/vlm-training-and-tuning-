@@ -34,7 +34,7 @@ def prf(tp: int, fp: int, fn: int) -> tuple[float, float, float]:
 
 
 def eval_distillation(reference: Path, predictions: Path) -> dict:
-    """Agreement between the local student and the Claude teacher."""
+    """Agreement between the local student and the teacher VLM."""
     ref_rows = [r for r in read_jsonl(reference) if "error" not in r]
     ref = {r["image"]: r for r in ref_rows}
     pred_rows = read_jsonl(predictions)
@@ -194,7 +194,7 @@ def main() -> None:
             raise SystemExit("--reference requires --predictions")
         report["distillation"] = eval_distillation(Path(args.reference), Path(args.predictions))
         d = report["distillation"]
-        print("=== 1. Distillation fidelity (student vs Claude teacher) ===")
+        print("=== 1. Distillation fidelity (student vs teacher VLM) ===")
         print(f"  frames compared : {d['frames_compared']} (of {d['reference_rows']} teacher labels)")
         if d["frames_compared"]:
             c = d["confusion"]

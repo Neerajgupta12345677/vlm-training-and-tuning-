@@ -502,6 +502,52 @@ REMINDER: VisDrone class ids are NOT COCO (0=pedestrian 1=people 2=bicycle
 the tricycles to VEHICLE_NAMES/VEHICLE_CLASSES before using these weights, or
 Stage 2 will silently ignore most vehicles.
 
+### *** EGO-MOTION COMPENSATION - fixed an existential bug *** (2026-09-04)
+An adversarial code review asked what happens when the camera moves. Answer:
+everything silently stopped working, and every measurement to date had been
+taken on an effectively bolted-down bridge camera.
+
+Every Stage 2 signal - dwell, speed, stop anchor, zone membership - was computed
+from IMAGE-plane position, which only equals world position for a fixed camera.
+On a drone that pans or drifts, a parked car has non-zero image velocity, so the
+stationary latch never engages. Nothing errors. The flagship rule just goes quiet.
+
+Measured A/B on a synthetic moving-camera clip (`--inject-camera-motion` pans a
+crop window across the 4K source, so content stays real while the viewpoint
+moves; 8s pan period, +/-2.5deg roll):
+
+  compensation OFF -> **0 events**  (the stopped truck is completely missed)
+  compensation ON  -> **1 event**   (detected at 9.4s)
+
+That is the whole bug and the whole fix, in one measurement. On the organisers'
+real drone footage the old code would have reported nothing and looked "clean".
+
+Implementation (`src/ego_motion.py`): shi-tomasi corners + pyramidal
+Lucas-Kanade flow, then a partial affine (4 DoF: pan/rotate/scale) fitted with
+RANSAC. Partial affine rather than homography because it is far more stable to
+fit from sparse noisy correspondences and it matches short-window drone motion.
+Track history, the stop anchor AND zone lookups are all now expressed in a
+camera-stabilised reference frame, so Stage 2's arithmetic is unchanged.
+Refuses rather than guesses: under `min_inliers` correspondences it reports
+failure instead of returning a bad transform, and exposes `camera_is_moving`
+so the system can say whether compensation was even needed.
+
+Cost: 27.7 -> 17.8 fps on this clip (still real-time against 12.5 needed);
+15.4 fps on the 4K static clip. Static-camera results are unchanged -
+detection 1.0, IoU 0.981, 0 false positives - so the fix is not a regression
+dressed up as a feature. `--no-ego-motion` keeps the A/B reproducible.
+
+### Two correctness bugs the same review found (2026-09-04)
+- **A live crash on documented commands.** `f"{None:>3}"` is a TypeError, and
+  `crowd_density` / `traffic_congestion` / `scene_sweep` all carry
+  `track_id=None`. Two format sites (pipeline.py, the Stage-3 queue-full and
+  harvest branches) had never been exercised with a scene-level event, so the
+  harvest command in SATURDAY.md died on any footage with 8+ people. Fixed with
+  a shared `_tid()` helper; verified by running that exact command.
+- **Our own eval printed a false claim.** eval.py said "student vs Claude
+  teacher" when the teacher was Groq qwen3.8-27b, and the "student" column was
+  the rule engine. Corrected to "teacher VLM".
+
 ## Remaining after the blockers clear
 - [ ] `distill_label.py` on the 15 harvested events (~$0.10 with claude-opus-5)
 - [ ] `build_kaggle_dataset.py --push`
