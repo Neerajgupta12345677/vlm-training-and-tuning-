@@ -599,6 +599,76 @@ What IS established: the plumbing works end to end (sweep fires on schedule at
 ~1.5% of frames, reaches the VLM, parses, and can escalate), and it does not
 false-alarm on ordinary scenes.
 
+### SUBMISSION PIPELINE BUILT: label mapping, CSV writer, scorer, batch runner
+Built to the organisers' exact documented schema (video_id, level, is_anomaly,
+class_name, start_time_sec, end_time_sec, description_summary; 12 official
+class strings + normal). All self-tested against synthetic fixtures matching
+their schema exactly, since the real 15-17GB pack was still downloading.
+
+- `src/label_map.py` - our event kind (+ VLM hazard_type override) -> one of
+  the 12 official strings. `person_in_roadway` and unescalated `crowd_density`
+  have no clean official equivalent - documented explicitly rather than
+  silently guessed (person_in_roadway approximates to loitering_or_suspicious
+  _presence; unescalated crowd_density is EXCLUDED, not force-mapped, since
+  inventing a label would manufacture false positives on every legitimate
+  gathering). 18/18 mapping cases verified.
+- `src/submission.py` - events.jsonl -> submission rows. Handles the two traps
+  that would otherwise be invisible: a video with zero detections MUST still
+  get a `normal` row (we emit nothing by default), and repeated triggers on
+  one track (our dwell rules re-fire as an object keeps sitting there) must
+  MERGE into one interval, not spam duplicate rows. 14/14 assertions pass on
+  fabricated events, including a harvest row (verdict=None) correctly NOT
+  counting as a detection.
+- `src/score_submission.py` - scores predictions.csv against ground_truth.csv:
+  video-level exact label-set accuracy, per-class P/R/F1 + macro-F1,
+  is_anomaly binary accuracy, and temporal IoU (>=0.3 threshold, matching
+  eval.py's existing bbox-IoU convention). Tolerant bool parsing
+  (True/true/1) since the real file's exact format is unverified. 9/9
+  assertions pass on a synthetic ground_truth.csv, including a hand-checked
+  IoU calculation (0.467, confirmed by manual arithmetic).
+- `src/run_ahc_dataset.py` - batch-runs pipeline.py per video (subprocess,
+  same safe pattern as demo.py - NOT a hand-built argparse Namespace, which
+  would risk a missing field crashing deep inside run_one), with per-video
+  auto zone calibration (without it wrong_way_driving can NEVER fire - it
+  needs zone.flow_deg with no fallback) and `--extract-labels-only` to pull
+  real (video, class, description_summary) rows straight out of
+  train/<class>/ground_truth.csv for distillation - strictly better than our
+  synthetic n=15 Groq-labelled set: real footage, real events, in-distribution
+  with the actual test set.
+
+Integration-tested end to end against a synthetic tree built from our REAL
+test clips (not just isolated unit tests): found and fixed two genuine gaps
+this way, not proven in isolation -
+  1. pipeline.py's own default --stop-seconds (20s) can exceed a whole short
+     test clip's length ("short event clips" per the dataset doc) - a 21.5s
+     clip with the anomaly starting at 2.4s produced ZERO events at the
+     default. run_ahc_dataset.py now defaults to 8s for batch/submission runs.
+  2. duplicate_window_s (20s default) exists to prevent alert-fatigue in the
+     LIVE/operator path; that tradeoff does not apply to offline scoring,
+     where more re-triggers means a better end_time_sec estimate. Shortened
+     to 4s for batch runs specifically - global default left untouched.
+Full chain verified: 2-video synthetic run -> predictions.csv -> scored
+against synthetic ground truth -> exact label-set accuracy 1.0, is_anomaly
+accuracy 1.0, macro-F1 1.0.
+
+**One open finding, not chased further (out of time before the real dataset
+finishes downloading) - re-verify once real footage exists:** on the
+canonical ground-truth clip, `stopped_vehicle` now fires exactly ONCE
+(t=7.1s) under the exact settings that PROGRESS.md documented as firing
+repeatedly earlier tonight (5.0s -> 9.1s -> 13.1s dwell) - before ego-motion
+compensation was added. Confirmed NOT a dedup artifact (reproduced identically
+with `--duplicate-window 0`, which fully disables the IoU-based dedup).
+Detection accuracy itself is unaffected - the ground-truth eval re-run AFTER
+ego-motion was added still shows detected=1.0, IoU=0.981, 0 FP - so this only
+risks UNDERSTATING end_time_sec on a persistent anomaly (fewer re-triggers to
+extend the merged episode's end), not missing the detection itself. Suspect:
+ego-motion's optical-flow transform may introduce enough residual jitter in
+"stabilised" coordinates to occasionally trip the anchored dwell latch's
+`move_release_bodylengths` threshold even on a static camera. Needs real
+footage to properly diagnose - not worth chasing on a self-composited clip
+where every other component (label mapping, CSV writer, scorer) is already
+proven correct against the SAME data.
+
 ## Remaining after the blockers clear
 - [ ] `distill_label.py` on the 15 harvested events (~$0.10 with claude-opus-5)
 - [ ] `build_kaggle_dataset.py --push`
