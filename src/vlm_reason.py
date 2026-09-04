@@ -90,28 +90,87 @@ OBSERVE_SYSTEM = (
     "The object of interest is outlined by a bright magenta box.\n"
     "Do not judge whether anything is moving - you cannot tell that from one still frame, "
     "and you are not being asked to.\n"
-    "Report three things:\n"
-    "  hazard_visible: true only if you can actually SEE one of the hazards listed "
-    "below. Otherwise false.\n"
-    "  hazard_type: must be exactly one word from this list: fire, smoke, collision, "
-    "debris, flood, fight, crowd, none.\n"
-    "    fire/smoke  - visible flames or a smoke plume\n"
-    "    collision   - vehicles crashed into each other or overturned\n"
-    "    debris      - spilled load, rubble or objects lying in the roadway\n"
-    "    flood       - standing water or a submerged road surface\n"
-    "    fight       - people physically fighting\n"
-    "    crowd       - a dense crowd gathered where one would not be expected\n"
-    "  Use 'none' for anything else, including ordinary people, ordinary traffic, "
-    "parked vehicles, wet-but-passable road, or shadows. Ordinary is the common case.\n"
+    "Answer in THIS ORDER, and describe before you classify:\n"
+    "  1. surroundings - in your own words, what do you actually see in this frame? "
+    "Name the setting and anything that stands out. Describe THIS image; do not reuse "
+    "wording from these instructions.\n"
+    "  2. hazard_visible - true only if what you just described includes one of the "
+    "hazards below.\n"
+    "  3. hazard_type - one word: fire, smoke, collision, debris, flood, fight, crowd, "
+    "or none.\n"
+    "       fire, smoke - visible flames, or a plume of smoke or thick haze\n"
+    "       collision   - vehicles crashed together or overturned\n"
+    "       debris      - spilled load, rubble or objects lying in the roadway\n"
+    "       flood       - standing water or a submerged road surface\n"
+    "       fight       - people physically fighting\n"
+    "       crowd       - a dense crowd gathered where one would not belong\n"
+    "Describe first, then decide. Do not invent a hazard that is not visible.\n"
     "  surroundings: one short sentence saying where the boxed object sits (live traffic "
     "lane, hard shoulder, lay-by, parking area, junction) and what is immediately around it.\n"
     "Answer with a single JSON object and nothing else."
 )
 
-OBSERVE_PROMPT = (
-    "Look at the object in the magenta box. Report hazard_visible, hazard_type and "
-    "surroundings for this frame as JSON."
+# A scene sweep has no highlighted object, so it cannot share OBSERVE_SYSTEM:
+# that prompt opens by describing a magenta box, and the model duly invented one
+# ("the boxed object is in the live traffic lane") for every sweep, anchoring on
+# a thing that was not there instead of scanning the frame.
+SWEEP_SYSTEM = (
+    "You are inspecting one frame of aerial drone video for hazards. There is no "
+    "highlighted object - examine the WHOLE frame.\n\n"
+    "Answer in THIS ORDER, and describe before you classify:\n"
+    "  1. surroundings - in your own words, what do you actually see across this frame? "
+    "Name the setting, the conditions, and anything that looks wrong or out of place. "
+    "Describe THIS image; do not reuse wording from these instructions.\n"
+    "  2. hazard_visible - true only if what you just described includes one of the "
+    "hazards below.\n"
+    "  3. hazard_type - one word: fire, smoke, collision, debris, flood, fight, crowd, "
+    "or none.\n"
+    "       fire, smoke - visible flames, or a plume of smoke or thick haze obscuring "
+    "part of the scene\n"
+    "       collision   - vehicles crashed together or overturned\n"
+    "       debris      - spilled load, rubble or objects lying in the roadway\n"
+    "       flood       - standing water, a submerged or waterlogged road surface\n"
+    "       fight       - people physically fighting\n"
+    "       crowd       - a dense crowd gathered where one would not belong\n"
+    "Describe first, then decide. Do not invent a hazard that is not visible.\n"
+    "Reply with a single JSON object and nothing else."
 )
+
+SWEEP_PROMPT = (
+    "Examine this entire frame. First write `surroundings` describing what you actually "
+    "see, including the road surface and visibility, then set `hazard_visible` and "
+    "`hazard_type` from your own description. Reply as JSON with those three keys."
+)
+
+OBSERVE_PROMPT = (
+    "Look carefully at this whole frame. First write `surroundings` describing what you "
+    "actually see here in your own words, then set `hazard_visible` and `hazard_type` "
+    "based on your own description. Reply as JSON with those three keys."
+)
+
+
+def _parse_observation(text: str) -> "SceneObservation | None":
+    """Parse a SceneObservation, tolerating prose and code fences around it."""
+    if not text:
+        return None
+    for candidate in (text.strip(), *(m.group(0) for m in re.finditer(r"\{.*?\}", text, re.DOTALL))):
+        try:
+            return SceneObservation.model_validate_json(candidate)
+        except Exception:  # noqa: BLE001
+            continue
+    # Last resort: pull the fields out of loose JSON-ish text.
+    try:
+        blob = re.search(r"\{.*\}", text, re.DOTALL)
+        if blob:
+            data = json.loads(blob.group(0))
+            return SceneObservation(
+                hazard_visible=bool(data.get("hazard_visible", False)),
+                hazard_type=str(data.get("hazard_type", "none")),
+                surroundings=str(data.get("surroundings", ""))[:300],
+            )
+    except Exception:  # noqa: BLE001
+        pass
+    return None
 
 
 def build_prompt_for_training(context: str) -> str:
@@ -274,13 +333,19 @@ class VLMReasoner:
         """
         return encode_jpeg_b64(downscale(highlight_target(frame, bbox), self.max_side))
 
-    def observe(self, frame: np.ndarray, bbox=None) -> tuple[SceneObservation, float, str]:
-        """Ask only what the model can see. Returns (observation, ms, raw)."""
-        if self.backend == "mock":
-            return self.observe_b64("")
-        return self.observe_b64(self.prepare_image(frame, bbox))
+    def observe(self, frame: np.ndarray, bbox=None,
+                sweep: bool = False) -> tuple[SceneObservation, float, str]:
+        """Ask only what the model can see. Returns (observation, ms, raw).
 
-    def observe_b64(self, image_b64: str) -> tuple[SceneObservation, float, str]:
+        `sweep=True` means there is no highlighted object and the whole frame is
+        under review, which needs a different prompt entirely.
+        """
+        if self.backend == "mock":
+            return self.observe_b64("", sweep=sweep)
+        return self.observe_b64(self.prepare_image(frame, bbox), sweep=sweep)
+
+    def observe_b64(self, image_b64: str,
+                    sweep: bool = False) -> tuple[SceneObservation, float, str]:
         """Observation on an already-encoded image, so it is thread-submittable.
 
         This is the reliable half of Stage 3. Schema-constrained decoding is
@@ -294,21 +359,25 @@ class VLMReasoner:
             )
             return obs, (time.perf_counter() - t0) * 1000.0, "(mock)"
 
-        raw = self._call_ollama(image_b64, OBSERVE_PROMPT, constrain=False,
-                                system=OBSERVE_SYSTEM, schema=observation_json_schema())
-        try:
-            obs = SceneObservation.model_validate_json(raw.strip())
-        except Exception:  # noqa: BLE001
-            match = re.search(r"\{.*?\}", raw, re.DOTALL)
-            try:
-                obs = SceneObservation.model_validate_json(match.group(0)) if match else None
-            except Exception:  # noqa: BLE001
-                obs = None
-            if obs is None:
-                obs = SceneObservation(
-                    hazard_visible=False, hazard_type="none",
-                    surroundings="(observation unavailable)",
-                )
+        # UNCONSTRAINED first. Schema-constrained decoding was already measured
+        # to collapse small models on judge(); observe() kept the constraint and
+        # suffered exactly the same way - it returned a canned constant
+        # ("live traffic lane", hazard none) for every input, including a
+        # pedestrian plaza, which is how the collapse announces itself. The
+        # schema is a fallback for unparseable output, not the default.
+        prompt = SWEEP_PROMPT if sweep else OBSERVE_PROMPT
+        system = observe_system_prompt(sweep=sweep)
+        raw = self._call_ollama(image_b64, prompt, constrain=False, system=system)
+        obs = _parse_observation(raw)
+        if obs is None:
+            raw2 = self._call_ollama(image_b64, prompt, constrain=False,
+                                     system=system,
+                                     schema=observation_json_schema())
+            obs = _parse_observation(raw2) or SceneObservation(
+                hazard_visible=False, hazard_type="none",
+                surroundings="(observation unavailable)",
+            )
+            raw = raw2
         return obs, (time.perf_counter() - t0) * 1000.0, raw
 
     # -- public API ---------------------------------------------------------
@@ -404,9 +473,48 @@ _REAL_HAZARDS = (
 )
 
 
+# Open-vocabulary additions, set at runtime from --watch-for. This is the answer
+# to the brief's central point - that a VLM's value is being "not tied to a fixed
+# set of classes" and queryable in language. A hand-coded allow-list alone would
+# just move YOLO's closed vocabulary into a regex; these let an operator name an
+# event the system has never seen ("fallen tree", "livestock on the road") and
+# have it reported, with no new rule, no retraining and no code change.
+_WATCH_FOR: list[str] = []
+
+
+def set_watch_for(terms: list[str] | None) -> list[str]:
+    """Register extra hazard terms to accept from the model. Returns the list."""
+    global _WATCH_FOR
+    _WATCH_FOR = [t.strip().lower() for t in (terms or []) if t and t.strip()]
+    return _WATCH_FOR
+
+
+def get_watch_for() -> list[str]:
+    return list(_WATCH_FOR)
+
+
 def _is_real_hazard(hazard_type: str) -> bool:
     t = (hazard_type or "").strip().lower()
-    return any(h in t for h in _REAL_HAZARDS)
+    if not t or t in {"none", "n/a", "nothing"}:
+        return False
+    if any(h in t for h in _REAL_HAZARDS):
+        return True
+    # An operator-supplied term matches if either side contains the other, so
+    # "fallen tree" is matched by a model replying "tree" and vice versa.
+    return any(w in t or t in w for w in _WATCH_FOR)
+
+
+def observe_system_prompt(sweep: bool = False) -> str:
+    """The observation system prompt, plus any operator-supplied categories."""
+    base = SWEEP_SYSTEM if sweep else OBSERVE_SYSTEM
+    if not _WATCH_FOR:
+        return base
+    extra = ", ".join(_WATCH_FOR)
+    return base.replace(
+        "Describe first, then decide.",
+        f"       Also report any of these if you see them: {extra}\n"
+        "Describe first, then decide.",
+    )
 
 
 def combine(event_kind: str, rule_anomalous: bool, rule_severity: float,
@@ -423,9 +531,14 @@ def combine(event_kind: str, rule_anomalous: bool, rule_severity: float,
         (_REAL_HAZARDS), not merely be non-empty - see the bug note above.
     """
     if obs.hazard_visible and _is_real_hazard(obs.hazard_type):
+        # An operator-named category is reported at a slightly lower severity
+        # than the built-in hazards: it is a watch item someone asked about, not
+        # a confirmed fire or crash, and it has had no validation behind it.
+        watched = obs.hazard_type.strip().lower()
+        is_builtin = any(h in watched for h in _REAL_HAZARDS)
         return AnomalyVerdict(
             anomalous=True,
-            severity=max(0.9, rule_severity),
+            severity=max(0.9 if is_builtin else 0.6, rule_severity),
             reason=f"{obs.hazard_type.capitalize()} visible at the scene. {obs.surroundings}".strip(),
         )
 

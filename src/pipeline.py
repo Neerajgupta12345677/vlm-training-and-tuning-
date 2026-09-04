@@ -34,7 +34,7 @@ from common import (
 from common import AnomalyVerdict
 from context_state import ContextStateTracker, TriggerConfig, ZoneMap
 from detect_track import Stage1Tracker
-from vlm_reason import VLMReasoner, check_ollama, combine, highlight_target
+from vlm_reason import VLMReasoner, check_ollama, combine, highlight_target, set_watch_for
 
 VIDEO_SUFFIXES = {".mp4", ".avi", ".mov", ".mkv", ".m4v", ".webm"}
 
@@ -408,6 +408,12 @@ def main() -> None:
                    help="A person stationary this long (outside a sidewalk) is loitering.")
     p.add_argument("--crowd-count", type=int, default=8,
                    help="Live person tracks in view above this count triggers crowd_density.")
+    p.add_argument("--watch-for", default=None,
+                   help="Comma-separated event types to look for that have NO hand-coded "
+                        "rule, e.g. \"fallen tree, livestock on road, crowd surge\". Goes "
+                        "into the VLM prompt and is accepted for escalation, so a new event "
+                        "type needs no code, no rule and no retraining. This is the "
+                        "open-vocabulary path the brief asks for.")
     p.add_argument("--scene-sweep", type=float, default=0.0,
                    help="Ask the VLM about the whole frame every N seconds, independent of "
                         "any tracked object. This is the ONLY path to static conditions the "
@@ -464,6 +470,13 @@ def main() -> None:
     args = p.parse_args()
 
     ensure_dirs()
+
+    if args.watch_for:
+        terms = set_watch_for(args.watch_for.split(","))
+        print(f"[open-vocab] also watching for: {', '.join(terms)}")
+        if args.decision == "rules" or args.no_vlm:
+            print("[open-vocab] NOTE: needs a VLM to answer - use --decision hybrid, "
+                  "and --scene-sweep to look for these without a triggering object.")
 
     if args.aerial:
         if args.imgsz == 640:

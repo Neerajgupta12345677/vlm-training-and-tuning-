@@ -548,6 +548,57 @@ dressed up as a feature. `--no-ego-motion` keeps the A/B reproducible.
   teacher" when the teacher was Groq qwen3.8-27b, and the "student" column was
   the rule engine. Corrected to "teacher VLM".
 
+### OPEN-VOCABULARY QUERYING - `--watch-for` (2026-09-04)
+The brief's central claim is that a VLM's value is being "not tied to a fixed
+set of classes" and queryable in language. A hardcoded hazard allow-list just
+moves YOLO's closed vocabulary into a regex, so:
+
+  `--watch-for "fallen tree, livestock on road, crowd surge"`
+
+goes into the VLM prompt AND is accepted for escalation. A new event type needs
+no rule, no retraining, no code change. Verified: "fallen tree" is rejected
+before registration and accepted after; a model replying just "tree" still
+matches; junk like "person" is still rejected, so it does not become a
+free-for-all. Operator-named categories escalate at 0.6 rather than the 0.9 of
+a validated built-in hazard - they are a watch item someone asked about, not a
+confirmed fire.
+
+### THREE REAL VLM BUGS FOUND, AND ONE HONEST DEAD END (2026-09-04)
+Chasing "why did the scene sweep miss an obvious smoke plume" found three
+genuine bugs, all of the same family - the model was not looking at the image:
+
+1. **Prompt parroting (third occurrence of this bug class).** Every sweep
+   returned `surroundings: "live traffic lane"` - which is the FIRST example in
+   my own prompt's parenthetical list. Small models copy in-prompt example
+   values verbatim instead of observing. Previously seen with moondream copying
+   "short sentence" and qwen copying the livestock example. Fixed by removing
+   all example values and demanding description BEFORE classification.
+2. **Schema-constrained collapse, re-introduced.** observe() still hard-forced
+   the JSON schema even though this was already measured to collapse small
+   models on judge(). Symptom: an identical canned answer in 6s for every
+   input, including a pedestrian plaza, vs 23s for a plain caption of the same
+   image. The 4x speed gap was the tell. Schema is now a parse fallback only.
+3. **Confabulated objects on sweeps.** OBSERVE_SYSTEM opens by describing a
+   magenta box; a sweep has no box, so the model invented one ("the boxed
+   object is in the live traffic lane") and anchored on a thing that was not
+   there. Sweeps now use a dedicated SWEEP_SYSTEM/SWEEP_PROMPT.
+
+After the fixes the sweep genuinely observes - descriptions are image-specific
+and correct ("a large, open, well-lit space with a grid-like pattern on the
+floor" for the pedestrian plaza), and still 0 false alarms on 3 ordinary frames.
+
+**The honest dead end: appearance-hazard detection remains UNVALIDATED.**
+The model describes my synthetic smoke frame's road as "clear" and my flood
+frame as "in good condition", and a plain caption of the smoke clip calls it
+"slightly foggy". A model that says "the road appears clear" of a flood overlay
+is telling me the overlay does not look like a flood. So the synthetics are not
+adequate proxies and CANNOT be used to claim smoke/flood/debris detection
+works. Do not quote a detection rate for those events. Validate on the
+organisers' real footage first - it reportedly contains fire/smoke.
+What IS established: the plumbing works end to end (sweep fires on schedule at
+~1.5% of frames, reaches the VLM, parses, and can escalate), and it does not
+false-alarm on ordinary scenes.
+
 ## Remaining after the blockers clear
 - [ ] `distill_label.py` on the 15 harvested events (~$0.10 with claude-opus-5)
 - [ ] `build_kaggle_dataset.py --push`
