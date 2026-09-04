@@ -100,6 +100,10 @@ def run_one(video: Path, args, truncate_events: bool = True) -> dict:
             loiter_seconds=args.loiter_seconds,
             crowd_count=args.crowd_count,
             wrong_way_tolerance_deg=args.wrong_way_tolerance,
+            wrong_way_min_flow_consistency=args.wrong_way_min_consistency,
+            wrong_way_min_flow_samples=args.wrong_way_min_samples,
+            congestion_seconds=args.congestion_seconds,
+            congestion_cooldown_s=args.congestion_cooldown,
             enable_slow_vehicle=args.enable_slow_vehicle,
             # Pointless without a model to ask, so ignore it under --decision rules.
             scene_sweep_seconds=(args.scene_sweep
@@ -424,9 +428,20 @@ def main() -> None:
                         "default: its thresholds were tuned against one oblique clip and "
                         "it costs 1 false positive on the aerial ground-truth run. Turn on "
                         "once you have footage you can validate it against.")
-    p.add_argument("--wrong-way-tolerance", type=float, default=100.0,
+    p.add_argument("--wrong-way-tolerance", type=float, default=135.0,
                    help="Degrees of heading deviation from a lane's calibrated flow before "
-                        "a vehicle counts as wrong-way.")
+                        "a vehicle counts as wrong-way. Only applied when the lane's flow "
+                        "calibration passes the consistency floors below.")
+    p.add_argument("--wrong-way-min-consistency", type=float, default=0.55,
+                   help="Circular resultant (0-1) a lane's calibrated flow must reach before "
+                        "wrong-way may fire in it. 0 disables the gate.")
+    p.add_argument("--wrong-way-min-samples", type=int, default=40,
+                   help="Motion observations a lane's flow must be averaged from before "
+                        "wrong-way may fire in it.")
+    p.add_argument("--congestion-seconds", type=float, default=12.0,
+                   help="Seconds of sustained stationary traffic before congestion fires. "
+                        "Must be well under the clip length or the rule can never trigger.")
+    p.add_argument("--congestion-cooldown", type=float, default=60.0)
     p.add_argument("--duplicate-window", type=float, default=None,
                    help="Seconds during which an overlapping box will not re-alert. "
                         "Set 0 on HARVEST runs: suppressing repeat alerts is right for an "

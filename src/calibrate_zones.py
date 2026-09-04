@@ -148,8 +148,20 @@ def auto_calibrate(video: Path, args) -> list[dict]:
         cv2.drawContours(cell_mask, [cnt], -1, 1, -1)
         s, c = float((flow_sin * cell_mask).sum()), float((flow_cos * cell_mask).sum())
         flow_deg = float(np.degrees(np.arctan2(s, c)) % 360.0) if (s or c) else None
+        # flow_sin/flow_cos accumulate UNIT vectors, so the length of their sum
+        # divided by the sample count is the circular resultant R in [0, 1]:
+        # 1.0 = every observed vehicle went the same way, ~0 = directions cancel.
+        # Without this a lane derived from a few seconds of scattered motion
+        # yields a confident-looking flow_deg that is pure noise, and every
+        # vehicle then reads as wrong-way. Measured: 5 false wrong-way alerts
+        # and 0 true ones on the public test set before this was recorded.
+        n_samples = float((moving * cell_mask).sum())
+        flow_consistency = (float(np.hypot(s, c)) / n_samples) if n_samples > 0 else 0.0
         zones.append(
-            {"name": f"lane{i}", "kind": "driving_lane", "polygon": pts.tolist(), "flow_deg": flow_deg}
+            {"name": f"lane{i}", "kind": "driving_lane", "polygon": pts.tolist(),
+             "flow_deg": flow_deg,
+             "flow_consistency": round(flow_consistency, 4),
+             "flow_samples": int(n_samples)}
         )
 
     # Parking = consistently occupied but not a travel path.

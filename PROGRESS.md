@@ -1,6 +1,17 @@
 # Progress Log (append short bullets only, newest at top)
 
-## Status: PIPELINE WORKS END-TO-END, night-tested. 2 free credentials still needed.
+## Status: per-class threshold calibration tried two ways, both worse than the global rule. SATURDAY.md rewritten for the classifier-centric pipeline.
+
+- Built `src\calibrate_thresholds.py`: per-class thresholds fitted on the classifier's held-out VAL split (365 videos, never trained on) instead of on the 34-video public test set. Hypothesis: `tune_appearance.py --per-class --cv`'s 0.230-vs-0.256 finding was about the TEST set being too small to fit 11 thresholds on, not about per-class thresholds being wrong in general — a 10x-larger, genuinely held-out set should fix that. **Measured result: macro-F1 0.126 on test, worse than either prior number.** The hypothesis was wrong, or at least not the dominant effect — most likely cause is real domain shift (organisers separate training-pool sources from the reserved test-set source at the video level; val is drawn from the training pool, so it isn't a faithful proxy for test's camera/scene distribution). Verdict: **use the global rule (`tune_appearance.py`, no `--per-class`). Two different per-class approaches have now failed for two different diagnosed reasons — do not try a third on the day.**
+- Re-dumped test scores with the epoch-6 checkpoint (val macro_recall 0.725, vs the epoch-1 checkpoint's ~0.650 that produced the previously-recorded macro-F1 0.256) and ran the same global-rule tuning: **macro-F1 dropped to 0.188.** Higher val accuracy did not mean a higher test score, consistent with the same domain-shift read above. `train_appearance.py` only keeps the single best-by-val-recall checkpoint (overwrites on every improvement), so the epoch-1 checkpoint that scored 0.256 is gone and cannot be re-measured. **Actionable fix, not yet made:** copy the checkpoint aside every few epochs during any retrain so this comparison stays possible, and evaluate more than just the final epoch against test before picking one to submit.
+- `SATURDAY.md` was completely rewritten - the old version described the motion-rules-only pipeline exclusively and never mentioned the classifier, `run_ahc_dataset.py --label-source hybrid`, `tune_appearance.py`, or `calibrate_thresholds.py`, none of which existed when it was written. It also never stated the multi-label-classification framing from the "Sept 4 evening — pivot" entry below. Verified the `--label-source hybrid` / `--appearance-weights` / `--appearance-threshold` flags referenced in the new runbook actually exist on `run_ahc_dataset.py --help` before publishing it, since the handover had flagged that path as never-executed.
+- Read all four organiser PDFs in `overview/` end to end (problem statement, dataset doc, prerequisites/resources guide, VAD primer) to confirm the classifier-centric read is right rather than assumed: schedule is 9:00 breakfast, 9:30-11:00 SOTA session, 11:00-18:00 build, 18:00-19:00 demos; "public benchmark datasets downloaded in advance so setup does not take up build time" confirms today's pack is meant to be used, not thrown away; "training sources are separated from both the public test set and PRIVATE evaluation set" is the likely root cause of the domain-shift findings above; hosted models are explicitly allowed for dev/training-data generation but "cannot be part of what makes the detector work at runtime" - unchanged constraint, already respected.
+
+## Status: Public test scored (rules-only). Exact-set acc 0.118, macro-F1 0.023, class TPs all 0.
+
+- Public test batch done: `python src\score_submission.py --gt C:\dvad\data\ahc\test\ground_truth.csv --pred C:\dvad\outputs\predictions.csv` → 34 videos, 33+1 missing T030, 1973s. Exact label-set acc **0.118**, is_anomaly acc **0.077** (tp=0 fp=2 fn=46 tn=4), macro-F1 **0.023**. No (video,class) overlap with timestamps. Rules-only cannot name the 12 AHC classes. Next: scene/VLM path for appearance classes.
+
+- AHC zip extracted to `C:\dvad\data\ahc\` (NOT OneDrive). Layout matches the docs. Pack is incomplete vs videos.csv: test missing T030.mp4 (33/34 on disk); train videos sparse except fire/smoke/flood/wrong_way. Official `is_anomaly` is lowercase `true`/`false` — writer now matches. Distill labels: `python src\run_ahc_dataset.py --data_dir C:\dvad\data\ahc --extract-labels-only --out C:\dvad\data\ahc_distill_labels.jsonl` -> **3173 rows, 12 classes, 100% have description_summary**. Public test score in progress (`--split test`, rules+aerial, stock YOLO). Next: `score_submission.py` once that finishes; hunt remaining zip parts if any.
 
 ### BLOCKERS
 - [ ] **Kaggle Phone Verification** (Settings -> Phone Verification). THE ONLY ONE LEFT.
@@ -668,6 +679,51 @@ ego-motion's optical-flow transform may introduce enough residual jitter in
 footage to properly diagnose - not worth chasing on a self-composited clip
 where every other component (label mapping, CSV writer, scorer) is already
 proven correct against the SAME data.
+
+## Sept 4 evening — pivot to clip classification (macro-F1 0.023 -> 0.245)
+- GT has NO timestamps: all 52 rows in `test/ground_truth.csv` have empty
+  start/end. The task as SCORED is multi-label clip classification, not
+  temporal localisation. 52 rows over 34 videos, so multi-row is legitimate.
+  Verify: `Import-Csv test\ground_truth.csv | Format-Table`
+- Test set is three datasets in one: T001-T019 are 5.7-26s, T021-T024/T032/T034
+  are **2 fps** (30-706 frames), T025-T034 are 240-629s. Motion rules cannot
+  work at 2fps.
+- Built `src\diag_speeds.py` to measure norm_speed distributions instead of
+  guessing thresholds. Finding that killed the speed-based congestion rule:
+  `normal` clip T003 reads as MORE congested than both GT congestion clips at
+  every cut 0.05-0.50 (T003 share 0.51 vs T008 0.09 at cut 0.15), because T003
+  is 256x192 and box jitter swamps speed on a few-pixel vehicle. No threshold
+  separates them. Verify: `python src\diag_speeds.py --videos T008,T009,T003
+  --imgsz 1280 --conf 0.10`
+- Fixed collision false positives: required an observed MOVING phase before a
+  stop counts (`collision_min_moving_s`). T008 fired at `age_s 0.0` on tracks
+  that were never moving. Accident precision 0.25 -> 0.33.
+- Appearance classifier promoted from 6 to **11 classes** (added loitering,
+  wrong_way, congestion, blocking; excluded stalled - only 4 train videos, and
+  it is the rules' one reliable TP). 12024 train / 2952 val frames, split by
+  video. Verify: `Get-Content C:\dvad\outputs\train11.log`
+- Caught 3312 frames mislabelled `normal` in the frame cache (the promoted
+  classes' frames from the previous run). `_prune_stale()` now self-heals it.
+- `src\tune_appearance.py` picks the decision rule by optimising the REAL
+  scorer over dumped probabilities, not a guessed threshold. Best rule:
+  thr 0.15, top_k 3, margin 0.10, normal_scale 0.5.
+- **Epoch-1 checkpoint scores macro-F1 0.245 / exact 0.324** (rules-only
+  baseline was 0.023 / 0.118). Non-zero F1 on 6 classes: fire 0.667,
+  loitering 0.667, smoke 0.5, accident 0.444, congestion 0.333, normal 0.333.
+  congestion was structurally unreachable by rules. Verify:
+  `python src\tune_appearance.py --scores C:\dvad\outputs\app_scores_ep1.json
+  --gt C:\dvad\data\ahc\test\ground_truth.csv`
+- `--label-source {hybrid,appearance,rules}` added to run_ahc_dataset: the
+  classifier owns the label, rules may only ADD classes it cannot emit.
+- Per-class thresholds (coordinate ascent, `--per-class`) reach in-sample
+  macro-F1 0.289 / exact 0.441, but leave-one-video-out (`--cv`) gives **0.230
+  vs the global rule's 0.256** — they memorise the 34-video public set (11
+  thresholds, 1-4 GT videos per class). Global rule stays. Building the CV
+  check was what caught it. Verify: `python src\tune_appearance.py --scores
+  C:\dvad\outputs\app_scores_ep1.json --gt C:\dvad\data\ahc\test\ground_truth.csv
+  --per-class --cv`
+- Next: full 12-epoch model, re-dump, re-tune, then close the zero classes
+  (fighting 3, road_spill 3, blocking 2, flood 2, wrong_way 1).
 
 ## Remaining after the blockers clear
 - [ ] `distill_label.py` on the 15 harvested events (~$0.10 with claude-opus-5)

@@ -99,9 +99,32 @@ class Zone:
     kind: str  # driving_lane | shoulder | parking | sidewalk | restricted
     polygon: np.ndarray  # (N, 2) int32
     flow_deg: float | None = None  # expected travel direction, for wrong-way checks
+    # Circular resultant of the headings flow_deg was averaged from, in [0, 1],
+    # plus how many observations went into it. Written by calibrate_zones.py.
+    # None means "unknown" (hand-drawn zones, or a file predating this field),
+    # which is treated as trustworthy so manual calibration still works.
+    flow_consistency: float | None = None
+    flow_samples: int | None = None
 
     def contains(self, x: float, y: float) -> bool:
         return cv2.pointPolygonTest(self.polygon, (float(x), float(y)), False) >= 0
+
+    def flow_is_trustworthy(self, min_consistency: float, min_samples: int) -> bool:
+        """Whether flow_deg is worth acting on for a wrong-way judgement.
+
+        Fails CLOSED on a direction learned from scattered or scarce motion:
+        the organisers weight false alarms as heavily as misses, and an
+        ungated wrong-way rule was the single largest false-positive source.
+        """
+        if self.flow_deg is None:
+            return False
+        if self.flow_consistency is None and self.flow_samples is None:
+            return True  # hand-drawn / legacy zone: the human meant it
+        if self.flow_consistency is not None and self.flow_consistency < min_consistency:
+            return False
+        if self.flow_samples is not None and self.flow_samples < min_samples:
+            return False
+        return True
 
 
 class ZoneMap:
@@ -122,6 +145,8 @@ class ZoneMap:
                 kind=z["kind"],
                 polygon=np.array(z["polygon"], dtype=np.int32),
                 flow_deg=z.get("flow_deg"),
+                flow_consistency=z.get("flow_consistency"),
+                flow_samples=z.get("flow_samples"),
             )
             for z in data["zones"]
         ]
@@ -279,16 +304,47 @@ class TriggerConfig:
     # stopped at a signal is not congestion, and firing on every red light is
     # the false-alarm behaviour the brief explicitly warns against.
     congestion_min_vehicles: int = 5
-    congestion_share: float = 0.6   # share of visible vehicles stationary
+    congestion_share: float = 0.6   # share of visible vehicles jammed
     congestion_seconds: float = 12.0
     congestion_cooldown_s: float = 60.0
+    # Congestion is CRAWLING traffic, not stopped traffic. Keying the share off
+    # stationary_speed (0.05) made the rule structurally unable to fire: on
+    # public-test T008 - ground truth traffic_congestion - the tracker measured
+    # 16 vehicles at an ambient 3.1 km/h, yet only 29% were below the stationary
+    # threshold, so the share test failed and the clip was reported as one
+    # stalled vehicle. A jam is dense slow-moving traffic, so the share is
+    # counted below this higher crawl speed instead.
+    congestion_crawl_speed: float = 0.18  # body-lengths/sec; ~3.5x stationary_speed
+    # traffic_accident, via a multi-vehicle abrupt-stop signature. See
+    # _check_collision - this is what separates a crash from a breakdown.
+    enable_collision: bool = True
+    collision_min_vehicles: int = 2   # one vehicle stopping is a breakdown
+    collision_window_s: float = 2.5   # how close in time the stops must be
+    collision_settle_s: float = 4.0   # how recently the stop must have happened
+    # A track that is stationary from its first frame never "came to a stop" -
+    # it was simply slow when first detected. Measured on public-test T008: the
+    # collision rule fired at age_s 0.0, one second into the clip, on two
+    # vehicles that had no motion history at all. min_track_age_s alone does not
+    # catch this, because a never-moving track still ages. Require an observed
+    # moving phase before the stop for it to count as an impact.
+    collision_min_moving_s: float = 0.8
+    collision_proximity_diags: float = 4.0  # cluster radius, in median box diagonals
+    collision_cooldown_s: float = 15.0
     # Periodic whole-frame check for STATIC conditions the tracker cannot see
     # (flooding, debris, spills, fire). 0 disables. Only meaningful with a VLM
     # backend - under --decision rules it produces nothing useful, so pipeline
     # leaves it off there.
     scene_sweep_seconds: float = 0.0
-    wrong_way_tolerance_deg: float = 100.0
+    # A genuine wrong-way vehicle is 150-180deg against the flow. 100deg fired
+    # on ordinary lane changes and on turns through a junction; measured 5 false
+    # positives and 0 true ones on the public test set at that setting.
+    wrong_way_tolerance_deg: float = 135.0
     wrong_way_min_speed: float = 0.3
+    # Calibration-quality floors for acting on a zone's flow_deg. See
+    # Zone.flow_is_trustworthy - directions learned from scattered motion are
+    # noise, and firing on them is worse than staying silent.
+    wrong_way_min_flow_consistency: float = 0.55
+    wrong_way_min_flow_samples: int = 40
     cooldown_seconds: float = 30.0
     max_calls_per_track: int = 3
     speed_window_s: float = 1.0
@@ -333,6 +389,7 @@ class ContextStateTracker:
         self._last_crowd_s: float | None = None
         self._congested_since_s: float | None = None
         self._last_congestion_s: float | None = None
+        self._last_collision_s: float | None = None
         self._last_sweep_s: float | None = None
         self._now = 0.0
         self._recent_alerts: list[tuple[float, tuple[float, float, float, float], str]] = []
@@ -632,6 +689,13 @@ class ContextStateTracker:
             self.events_fired += 1
             events.append(crowd)
 
+        # Before congestion: a crash is an abrupt stop in traffic that is still
+        # flowing, so it must be judged while the stopped share is still low.
+        crash = self._check_collision(det)
+        if crash is not None:
+            self.events_fired += 1
+            events.append(crash)
+
         jam = self._check_congestion(det)
         if jam is not None:
             self.events_fired += 1
@@ -700,6 +764,107 @@ class ContextStateTracker:
             rule_severity=0.0,
         )
 
+    def _check_collision(self, det) -> Event | None:
+        """Scene-level rule: traffic_accident, via a stop-with-impact signature.
+
+        A crashed car and a broken-down car are both stopped cars, so
+        `stopped_vehicle` mapped BOTH to stalled_or_broken_down_vehicle and
+        traffic_accident scored F1 0.0 with 7 videos of support on the public
+        test set. What separates them is not the stop, it is how the stop
+        happened:
+          - a breakdown is ONE vehicle coming to rest,
+          - a collision is TWO OR MORE vehicles stopping within a couple of
+            seconds of each other, close together, while the rest of the
+            traffic is still moving.
+        That last clause is what keeps this off a red light or a jam: in
+        congestion, everything stops, so the stopped SHARE is high and this
+        rule declines. Deliberately conservative - it would rather miss than
+        relabel every breakdown as a crash.
+        """
+        cfg = self.cfg
+        if not cfg.enable_collision:
+            return None
+        vehicles = [st for st in self.tracks.values()
+                    if st.is_vehicle and st.last_seen_s >= det.timestamp_s - 1.0]
+        if len(vehicles) < cfg.collision_min_vehicles:
+            return None
+
+        # Vehicles that came to rest recently, and were tracked long enough
+        # beforehand that "it was moving, now it isn't" is a real observation.
+        just_stopped = [
+            st for st in vehicles
+            if st.stationary_since_s is not None
+            and st.age_s >= cfg.min_track_age_s
+            and (st.stationary_since_s - st.first_seen_s) >= cfg.collision_min_moving_s
+            and (det.timestamp_s - st.stationary_since_s) <= cfg.collision_settle_s
+        ]
+        if len(just_stopped) < cfg.collision_min_vehicles:
+            return None
+
+        # A jam is not a crash: if most of the scene is stopped, this is
+        # congestion and _check_congestion owns it.
+        stopped_share = sum(1 for v in vehicles if v.norm_speed < cfg.stationary_speed) / len(vehicles)
+        if stopped_share >= cfg.congestion_share:
+            return None
+
+        # Cluster on stop TIME, then require spatial proximity within the cluster.
+        just_stopped.sort(key=lambda s: s.stationary_since_s or 0.0)
+        best: list[TrackState] = []
+        for i, anchor in enumerate(just_stopped):
+            group = [s for s in just_stopped[i:]
+                     if abs((s.stationary_since_s or 0.0) - (anchor.stationary_since_s or 0.0))
+                     <= cfg.collision_window_s]
+            if len(group) > len(best):
+                best = group
+        if len(best) < cfg.collision_min_vehicles:
+            return None
+
+        def centre(s: TrackState) -> tuple[float, float]:
+            x1, y1, x2, y2 = s.last_xyxy
+            return (x1 + x2) / 2.0, (y1 + y2) / 2.0
+
+        diags = [s.box_diag for s in best if s.box_diag > 0]
+        reach = (float(np.median(diags)) if diags else 0.0) * cfg.collision_proximity_diags
+        if reach <= 0:
+            return None
+        cx0, cy0 = centre(best[0])
+        near = [s for s in best if float(np.hypot(*(np.subtract(centre(s), (cx0, cy0))))) <= reach]
+        if len(near) < cfg.collision_min_vehicles:
+            return None
+
+        if (self._last_collision_s is not None
+                and det.timestamp_s - self._last_collision_s < cfg.collision_cooldown_s):
+            return None
+        self._last_collision_s = det.timestamp_s
+
+        onset = min(s.stationary_since_s or det.timestamp_s for s in near)
+        xs = [centre(s)[0] for s in near]
+        ys = [centre(s)[1] for s in near]
+        ctx = (
+            f"{len(near)} vehicles ({', '.join(sorted({s.class_name for s in near}))}) came to a "
+            f"stop within {cfg.collision_window_s:.0f}s of each other and close together in "
+            f"{phrase_zone(near[0].zone_kind)}, while only {stopped_share * 100:.0f}% of visible "
+            f"traffic is stationary - surrounding vehicles are still moving. "
+            f"An abrupt multi-vehicle stop in flowing traffic is a collision signature "
+            f"rather than a breakdown."
+        )
+        return Event(
+            frame_idx=det.frame_idx,
+            timestamp_s=det.timestamp_s,
+            kind="collision_signature",
+            track_id=None,
+            class_name="vehicle",
+            zone_kind=near[0].zone_kind,
+            bbox=(min(xs) - reach / 2, min(ys) - reach / 2, max(xs) + reach / 2, max(ys) + reach / 2),
+            context=ctx,
+            features={"vehicles_stopped_together": len(near),
+                      "stopped_share": round(stopped_share, 2),
+                      "onset_s": round(onset, 2),
+                      "age_s": round(det.timestamp_s - onset, 2)},
+            rule_anomalous=True,
+            rule_severity=0.85,
+        )
+
     def _check_congestion(self, det) -> Event | None:
         """Scene-level rule: traffic congestion, sustained.
 
@@ -718,7 +883,7 @@ class ContextStateTracker:
             self._congested_since_s = None
             return None
 
-        stopped = sum(1 for st in vehicles if st.norm_speed < cfg.stationary_speed)
+        stopped = sum(1 for st in vehicles if st.norm_speed < cfg.congestion_crawl_speed)
         share = stopped / len(vehicles)
         if share < cfg.congestion_share:
             self._congested_since_s = None
@@ -739,7 +904,7 @@ class ContextStateTracker:
         ys = [(v.last_xyxy[1] + v.last_xyxy[3]) / 2 for v in vehicles]
         ctx = (
             f"{stopped} of {len(vehicles)} vehicles in view ({share * 100:.0f}%) have been "
-            f"stationary for {held:.0f}s in {phrase_zone(vehicles[0].zone_kind)}. "
+            f"stopped or crawling for {held:.0f}s in {phrase_zone(vehicles[0].zone_kind)}. "
             f"This is sustained congestion rather than a single stopped vehicle."
         )
         return Event(
@@ -966,7 +1131,9 @@ class ContextStateTracker:
         # Rule 4: vehicle travelling against the calibrated flow of its lane.
         if st.is_vehicle and st.heading_deg is not None and st.norm_speed >= cfg.wrong_way_min_speed:
             _, zone = self.zones.lookup(*st.history[-1][1:3])
-            if zone is not None and zone.flow_deg is not None:
+            if zone is not None and zone.flow_is_trustworthy(
+                cfg.wrong_way_min_flow_consistency, cfg.wrong_way_min_flow_samples
+            ):
                 delta = abs((st.heading_deg - zone.flow_deg + 180.0) % 360.0 - 180.0)
                 if delta >= cfg.wrong_way_tolerance_deg:
                     ctx = (

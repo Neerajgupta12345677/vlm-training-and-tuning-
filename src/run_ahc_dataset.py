@@ -32,12 +32,18 @@ import sys
 import time
 from pathlib import Path
 
-from common import OUTPUTS_DIR
+from common import OUTPUTS_DIR, probe_video
 from submission import build_rows, read_jsonl, write_csv
 
 PY = sys.executable
 SRC = Path(__file__).resolve().parent
 VIDEO_SUFFIXES = {".mp4", ".avi", ".mov", ".mkv", ".m4v", ".webm"}
+
+# Classes the motion rules may contribute under --label-source hybrid, provided
+# the appearance classifier was not trained to emit them. Intersected with the
+# live checkpoint's class list at runtime rather than assumed, so retraining
+# with a wider head automatically narrows what the rules are allowed to add.
+RULE_ONLY_CLASSES = {"stalled_or_broken_down_vehicle"}
 
 
 def _read_id_map(videos_csv: Path) -> dict[str, str]:
@@ -68,19 +74,129 @@ def _read_id_map(videos_csv: Path) -> dict[str, str]:
 
 
 def find_videos(split_dir: Path) -> list[tuple[str, Path]]:
-    """Return [(video_id, path), ...] for a test/ dir or one train/<class>/ dir."""
+    """Return [(video_id, path), ...] for a test/ dir or one train/<class>/ dir.
+
+    videos.csv is the authority for ids. Files missing from disk are still
+    returned (path may not exist) so the submission gets a `normal` fallback
+    row instead of a silent gap — the public test pack we received is missing
+    T030.mp4 even though videos.csv and ground_truth.csv list it.
+    """
     videos_dir = split_dir / "videos"
-    if not videos_dir.exists():
-        return []
     id_map = _read_id_map(split_dir / "videos.csv")
     file_to_id = {Path(v).name: k for k, v in id_map.items()}
-    out = []
-    for f in sorted(videos_dir.iterdir()):
-        if f.suffix.lower() not in VIDEO_SUFFIXES:
+    out: list[tuple[str, Path]] = []
+    seen: set[str] = set()
+    if videos_dir.exists():
+        for f in sorted(videos_dir.iterdir()):
+            if f.suffix.lower() not in VIDEO_SUFFIXES:
+                continue
+            video_id = file_to_id.get(f.name, f.stem)  # fall back to filename stem
+            out.append((video_id, f))
+            seen.add(video_id)
+    for vid, rel in id_map.items():
+        if vid in seen:
             continue
-        video_id = file_to_id.get(f.name, f.stem)  # fall back to filename stem
-        out.append((video_id, f))
+        path = split_dir / rel
+        if not path.exists():
+            path = videos_dir / Path(rel).name
+        out.append((vid, path))
     return out
+
+
+def level_aware_thresholds(duration_s: float) -> dict[str, float]:
+    """Dwell windows scaled to how much footage there actually is.
+
+    A fixed 12s congestion window on a 5.8s clip is arithmetically identical to
+    having no congestion rule at all, and that is what the public test measured:
+    T009 was called `normal` while the detector was returning 45.8 objects per
+    frame including 204 cars. Every Level-1 clip in the set is 5.7-5.8s, so the
+    stopped (8s), loitering (10s) and congestion (12s) rules could never fire on
+    any of them regardless of detection quality.
+    """
+    if duration_s < 8.0:
+        return {
+            "stop_seconds": max(1.5, duration_s * 0.35),
+            "loiter_seconds": max(2.0, duration_s * 0.45),
+            "congestion_seconds": max(2.0, duration_s * 0.40),
+            "congestion_cooldown": duration_s,
+            "duplicate_window": min(4.0, duration_s * 0.5),
+            "cooldown": max(1.0, duration_s * 0.3),
+        }
+    if duration_s < 30.0:
+        return {
+            "stop_seconds": 5.0,
+            "loiter_seconds": 8.0,
+            "congestion_seconds": 8.0,
+            "congestion_cooldown": 30.0,
+            "duplicate_window": 4.0,
+            "cooldown": 6.0,
+        }
+    return {
+        "stop_seconds": 8.0,
+        "loiter_seconds": 10.0,
+        "congestion_seconds": 12.0,
+        "congestion_cooldown": 60.0,
+        "duplicate_window": 4.0,
+        "cooldown": 6.0,
+    }
+
+
+def adaptive_stride(fps: float, requested: int) -> int:
+    """Never skip frames on footage that barely has any.
+
+    T021-T024 are 896x448 at 1.9 fps - 30-38 frames total. At --stride 2 the
+    pipeline saw 19 samples, which is not enough for ByteTrack to hold an
+    identity across the clip, so no dwell-based rule could accumulate state.
+    """
+    if fps < 5.0:
+        return 1
+    if fps < 15.0:
+        return min(requested, 2)
+    return requested
+
+
+def load_appearance(args):
+    """The Stage 1.5 classifier, or None. Never fatal: a missing model must
+    degrade to the motion-only pipeline, not abort a scoring run."""
+    if not args.appearance:
+        return None
+    try:
+        from appearance_classifier import DEFAULT_WEIGHTS, AppearanceClassifier
+
+        weights = args.appearance_weights or DEFAULT_WEIGHTS
+        clf = AppearanceClassifier(weights, threshold=args.appearance_threshold)
+        print(f"[stage1.5] appearance classifier: {clf.classes} @ {args.appearance_threshold}")
+        return clf
+    except Exception as e:  # noqa: BLE001
+        print(f"[stage1.5] disabled ({e})")
+        return None
+
+
+def appearance_rows(clf, video: Path, video_id: str, duration_s: float, level: int) -> list[dict]:
+    """Submission rows from the appearance classifier, or []."""
+    verdict = clf.classify_video(video)
+    if verdict is None:
+        return []
+    desc = (f"{verdict['class_name'].replace('_', ' ')} visible in frame "
+            f"(appearance classifier, confidence {verdict['confidence']:.2f}).")
+    # Short clips are the organisers' Level 1 shape: one row, no timestamps.
+    # Localising a 6-second clip adds nothing and risks a worse temporal IoU
+    # than leaving the interval empty, which is what their own GT does.
+    if duration_s < 8.0:
+        return [{"video_id": video_id, "level": level, "is_anomaly": True,
+                 "class_name": verdict["class_name"],
+                 "start_time_sec": "", "end_time_sec": "", "description_summary": desc}]
+    windows = clf.classify_windows(video)
+    if not windows:
+        return [{"video_id": video_id, "level": level, "is_anomaly": True,
+                 "class_name": verdict["class_name"],
+                 "start_time_sec": "", "end_time_sec": "", "description_summary": desc}]
+    return [{"video_id": video_id, "level": level, "is_anomaly": True,
+             "class_name": w["class_name"],
+             "start_time_sec": w["start_time_sec"], "end_time_sec": w["end_time_sec"],
+             "description_summary": f"{w['class_name'].replace('_', ' ')} visible "
+                                    f"(confidence {w['confidence']:.2f})."}
+            for w in windows]
 
 
 def calibrate_zones_for(video: Path, args) -> Path | None:
@@ -109,18 +225,42 @@ def calibrate_zones_for(video: Path, args) -> Path | None:
 def run_pipeline_on(video: Path, events_out: Path, args) -> bool:
     """One subprocess call to pipeline.py. Returns True on success."""
     zones = calibrate_zones_for(video, args)
+
+    th = {
+        "stop_seconds": args.stop_seconds,
+        "loiter_seconds": args.loiter_seconds,
+        "congestion_seconds": args.congestion_seconds,
+        "congestion_cooldown": args.congestion_cooldown,
+        "duplicate_window": args.duplicate_window,
+        "cooldown": args.cooldown,
+    }
+    stride = args.stride
+    if args.adaptive:
+        try:
+            meta = probe_video(video)
+            duration = meta.frame_count / meta.fps if meta.fps else 0.0
+            if duration > 0:
+                th = level_aware_thresholds(duration)
+            stride = adaptive_stride(meta.fps, args.stride)
+        except Exception as e:  # noqa: BLE001 - a probe failure must not kill the video
+            print(f"    [warn] probe failed ({e}); using fixed thresholds")
+
     cmd = [
         PY, str(SRC / "pipeline.py"),
         "--source", str(video),
         "--decision", args.decision,
-        "--stride", str(args.stride),
-        "--stop-seconds", str(args.stop_seconds),
-        "--cooldown", str(args.cooldown),
-        "--loiter-seconds", str(args.loiter_seconds),
+        "--stride", str(stride),
+        "--stop-seconds", f"{th['stop_seconds']:.2f}",
+        "--cooldown", f"{th['cooldown']:.2f}",
+        "--loiter-seconds", f"{th['loiter_seconds']:.2f}",
+        "--congestion-seconds", f"{th['congestion_seconds']:.2f}",
+        "--congestion-cooldown", f"{th['congestion_cooldown']:.2f}",
         "--crowd-count", str(args.crowd_count),
         "--wrong-way-tolerance", str(args.wrong_way_tolerance),
+        "--wrong-way-min-consistency", str(args.wrong_way_min_consistency),
+        "--wrong-way-min-samples", str(args.wrong_way_min_samples),
         "--max-calls-per-track", str(args.max_calls_per_track),
-        "--duplicate-window", str(args.duplicate_window),
+        "--duplicate-window", f"{th['duplicate_window']:.2f}",
         "--out", str(events_out),
         "--summary-out", str(events_out.with_suffix(".summary.json")),
     ]
@@ -231,7 +371,16 @@ def main() -> None:
     p.add_argument("--cooldown", type=float, default=6.0)
     p.add_argument("--loiter-seconds", type=float, default=10.0)
     p.add_argument("--crowd-count", type=int, default=8)
-    p.add_argument("--wrong-way-tolerance", type=float, default=100.0)
+    p.add_argument("--wrong-way-tolerance", type=float, default=135.0)
+    p.add_argument("--wrong-way-min-consistency", type=float, default=0.55)
+    p.add_argument("--wrong-way-min-samples", type=int, default=40)
+    p.add_argument("--congestion-seconds", type=float, default=12.0)
+    p.add_argument("--congestion-cooldown", type=float, default=60.0)
+    p.add_argument("--adaptive", action="store_true", default=True,
+                   help="Scale dwell thresholds and stride to each clip's duration/fps.")
+    p.add_argument("--no-adaptive", dest="adaptive", action="store_false")
+    p.add_argument("--videos", default=None,
+                   help="Comma-separated video_ids to run (e.g. T018,T009). Default: all.")
     p.add_argument("--max-calls-per-track", type=int, default=30)
     # Measured finding: with the LIVE default (duplicate_window_s=20), a truck
     # stopped for a whole 21.5s test clip logged exactly ONE alert, so our
@@ -242,6 +391,22 @@ def main() -> None:
     # tradeoff does not apply to an offline batch run being scored on interval
     # accuracy, so it is shortened here rather than changed globally.
     p.add_argument("--duplicate-window", type=float, default=4.0)
+    p.add_argument("--appearance", action="store_true", default=True,
+                   help="Run the Stage 1.5 appearance classifier (fire/smoke/flood/debris) "
+                        "before the motion pipeline. Silently skipped if unavailable.")
+    p.add_argument("--no-appearance", dest="appearance", action="store_false")
+    p.add_argument("--appearance-weights", default=None)
+    # 0.72 was tuned against a 7-class head. An 11-class head spreads the
+    # probability mass over more outputs, so the same absolute cut rejects
+    # almost everything. Pick this with src\tune_appearance.py, which optimises
+    # the real scorer over dumped probabilities rather than guessing.
+    p.add_argument("--appearance-threshold", type=float, default=0.30)
+    p.add_argument("--label-source", default="hybrid",
+                   choices=["hybrid", "appearance", "rules"],
+                   help="Who owns the class label. 'appearance': the classifier alone "
+                        "(fast - no motion pipeline). 'rules': motion pipeline alone. "
+                        "'hybrid' (default): the classifier labels the clip, and the motion "
+                        "rules may only add classes the classifier does not model.")
     p.add_argument("--level", type=int, default=3, choices=[1, 2, 3])
     p.add_argument("--out", default=str(OUTPUTS_DIR / "predictions.csv"))
     p.add_argument("--events-dir", default=str(OUTPUTS_DIR / "ahc_events"))
@@ -267,6 +432,14 @@ def main() -> None:
     if not videos:
         raise SystemExit(f"No videos found under {split_dir}. Check the folder structure matches "
                          f"the documented layout (…/videos/*.mp4).")
+    if args.videos:
+        wanted = {v.strip() for v in args.videos.split(",") if v.strip()}
+        videos = [(vid, p) for vid, p in videos if vid in wanted]
+        missing = wanted - {vid for vid, _ in videos}
+        if missing:
+            print(f"[warn] --videos ids not found: {sorted(missing)}")
+        if not videos:
+            raise SystemExit(f"None of --videos {sorted(wanted)} matched.")
     if args.limit:
         videos = videos[: args.limit]
 
@@ -280,20 +453,84 @@ def main() -> None:
     print(f"[plan] decision={args.decision}  aerial={args.aerial}  night={args.night}  "
           f"weights={args.weights or 'stock'}")
 
+    appearance = load_appearance(args)
+
     total_rows = 0
     failures = 0
     t_start = time.perf_counter()
     for i, (video_id, video_path) in enumerate(videos, 1):
         t0 = time.perf_counter()
         events_path = events_dir / f"{video_id}.jsonl"
+        if not video_path.exists():
+            print(f"  [{i}/{len(videos)}] {video_id:<24} MISSING FILE -> normal")
+            rows = build_rows([], video_id, level=args.level)
+            write_csv(rows, out_path, append=(i > 1))
+            total_rows += len(rows)
+            continue
+
+        # Stage 1.5 first: it is ~0.3s per clip and answers the classes the
+        # motion rules structurally cannot. On a short clip a confident
+        # appearance verdict IS the whole story, so the motion pipeline is
+        # skipped - it costs 20-40s and can only add a contradictory label.
+        app_rows: list[dict] = []
+        duration_s = 0.0
+        if appearance is not None:
+            try:
+                meta = probe_video(video_path)
+                duration_s = meta.frame_count / meta.fps if meta.fps else 0.0
+            except Exception:  # noqa: BLE001
+                duration_s = 0.0
+            try:
+                app_rows = appearance_rows(appearance, video_path, video_id,
+                                           duration_s, args.level)
+            except Exception as e:  # noqa: BLE001
+                print(f"    [warn] appearance classifier failed: {e}")
+
+        # The classifier alone, when asked for it: no motion pipeline at all.
+        # This is also the honest economics story - MobileNetV3-Small is ~0.3s
+        # per clip against 20-40s for detect+track over the same video.
+        if args.label_source == "appearance" or (app_rows and duration_s and duration_s < 8.0):
+            rows = app_rows or build_rows([], video_id, level=args.level)
+            write_csv(rows, out_path, append=(i > 1))
+            total_rows += len(rows)
+            dt = time.perf_counter() - t0
+            labels = ", ".join(sorted({r["class_name"] for r in rows}))
+            print(f"  [{i}/{len(videos)}] {video_id:<24} {dt:6.1f}s  -> {labels} [appearance]")
+            continue
+
         ok = run_pipeline_on(video_path, events_path, args)
-        if not ok or not events_path.exists():
+        summary_path = events_path.with_suffix(".summary.json")
+        if not ok or not (events_path.exists() or summary_path.exists()):
+            # A genuine failure: the pipeline exited non-zero, or produced no
+            # output at all. A clean run over a video with nothing to report
+            # writes only the summary and NO .jsonl - that is a correct
+            # `normal`, not a crash, and counting it inflated the reported
+            # failure count to 22/34 on a run where nothing actually failed.
             failures += 1
             # A failed run must still produce a submission row - a missing
             # video_id in predictions.csv is worse than a wrong guess of "normal".
             rows = build_rows([], video_id, level=args.level)
         else:
-            rows = build_rows(read_jsonl(events_path), video_id, level=args.level)
+            events = read_jsonl(events_path) if events_path.exists() else []
+            rows = build_rows(events, video_id, level=args.level)
+        if args.label_source == "hybrid" and appearance is not None:
+            # The classifier owns the label; the rules may only ADD a class it
+            # was not trained to emit. Measured justification: on the classes
+            # both can produce, the rules were worse - collision precision 0.33,
+            # congestion structurally unable to fire (see src\diag_speeds.py),
+            # and wrong-way either spraying false positives or gated silent.
+            # stalled_or_broken_down_vehicle is the exception in both
+            # directions: 4 training videos is too few to model, and it is the
+            # rules' single reliable true positive on the public test set.
+            addable = {c for c in RULE_ONLY_CLASSES if c not in appearance.labels}
+            rule_rows = [r for r in rows if r["class_name"] in addable]
+            rows = (app_rows + rule_rows) or build_rows([], video_id, level=args.level)
+        elif app_rows:
+            # Drop a bare `normal` placeholder from the motion side - the
+            # appearance verdict is a positive finding and a `normal` row
+            # alongside it would contradict it in the same video.
+            rows = [r for r in rows if r["class_name"] != "normal"]
+            rows = app_rows + rows
         write_csv(rows, out_path, append=(i > 1))
         total_rows += len(rows)
         dt = time.perf_counter() - t0

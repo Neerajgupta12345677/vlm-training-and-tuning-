@@ -33,10 +33,8 @@ IOU_THRESHOLD = 0.3  # matches eval.py's ground-truth bbox IoU convention
 
 
 def _parse_bool(s: str) -> bool:
-    """Tolerant bool parsing - is_anomaly's on-disk format is genuinely
-    unknown until a real ground_truth.csv exists (True/False, true/false,
-    TRUE/FALSE, 1/0 are all plausible). Never let a format mismatch here
-    silently zero out every row's score."""
+    """Official public GT uses lowercase true/false (verified 2026-09-04).
+    Still accept True/FALSE/1/0 so a mismatched writer cannot silently zero scores."""
     return str(s).strip().lower() in {"true", "1", "yes"}
 
 

@@ -37,6 +37,9 @@ CSV_COLUMNS = ["video_id", "level", "is_anomaly", "class_name",
 # window, not the start. Keyed to the exact feature names each rule writes
 # in context_state.py.
 _ONSET_FEATURE = {
+    # age_s is set to (now - first stop in the cluster), so subtracting it
+    # recovers the moment the impact actually happened.
+    "collision_signature": "age_s",
     "stopped_vehicle": "stationary_s",
     "loitering": "stationary_s",
     "traffic_congestion": "sustained_s",
@@ -171,6 +174,14 @@ def build_rows(events: list[dict], video_id: str, level: int = 3,
     } for ep in sorted(episodes, key=lambda e: e.start)]
 
 
+def _csv_bool(v) -> str:
+    """Official ground_truth.csv uses lowercase true/false (verified on the
+    public test set 2026-09-04). Python's csv module would write True/False."""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    return "true" if str(v).strip().lower() in {"true", "1", "yes"} else "false"
+
+
 def write_csv(rows: list[dict], path: Path, append: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     mode = "a" if append and path.exists() else "w"
@@ -180,7 +191,9 @@ def write_csv(rows: list[dict], path: Path, append: bool = False) -> None:
         if write_header:
             w.writeheader()
         for row in rows:
-            w.writerow(row)
+            out = dict(row)
+            out["is_anomaly"] = _csv_bool(out.get("is_anomaly"))
+            w.writerow(out)
 
 
 def read_jsonl(path: Path) -> list[dict]:

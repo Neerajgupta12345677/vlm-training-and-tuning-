@@ -1,356 +1,274 @@
 # Saturday runbook — Sept 5, FlytBase Labs
 
-**Event:** Visual Intelligence Hackathon, 9:00–19:00, FlytBase Labs, Baner, Pune.
-Build window is **11:00–18:00 (7 hours)**; demos 18:00–19:00.
-Problem statement, evaluation criteria and submission format are revealed on the day.
-Organisers supply **real urban drone footage including night conditions** plus
-pre-prepared public benchmark datasets.
-
-Their stated challenge is *"An object itself usually isn't the anomaly. The context is."*
-with three constraints — small model, real time, economical across many feeds.
-Those map onto numbers this pipeline already prints:
-
-| Their constraint | Our evidence | Where |
-|---|---|---|
-| Context, not objects | Stage 2 dwell + zone + stopped-neighbour ratio; a lone stop alerts, a jam does not | `context_state.py` |
-| Small model | YOLO26n (5.3MB) + a 1.8–3B VLM, all local on a 4GB GTX 1650 | run header |
-| Real time | 55.1 fps at 1080p, 4.3x the rate needed | run summary |
-| Economical | **4.41 feeds/GPU at 1080p**; only **0.67% of frames** reach the VLM | run summary |
-
-**Both night footage and frame-folder datasets are already tested — see §1b and §1c.**
+**Event:** Visual Intelligence Hackathon, 9:00–19:00. Build window **11:00–18:00**,
+demos 18:00–19:00. Rewritten 2026-09-04 evening after the real dataset landed and
+the architecture pivoted on measured evidence — the previous version of this file
+described a pipeline that no longer carries the score. If you are reading a stale
+copy, check `HANDOVER.md` first, it is the fast-start entry point.
 
 Everything below is copy-pasteable. `PY` is the venv interpreter; nothing uses
-bare `python` (the system default is 3.13t freethreaded and has no ML wheels).
-
+bare `python` (the system default is 3.13t freethreaded, no ML wheels).
 ```
 set PY=C:\dvad\.venv\Scripts\python.exe
 ```
 
 ---
 
-## 0. Sanity check (run this FIRST, before the dataset arrives)
+## 0. The one thing to understand before touching anything
+
+**The task as scored is multi-label CLIP CLASSIFICATION, not temporal
+localisation.** Verified three ways on the organisers' own public test set:
+every one of the 52 `ground_truth.csv` rows has empty `start_time_sec`/
+`end_time_sec`; `train/` is one folder per class; 52 GT rows over 34 videos
+means a video can carry several labels. **Do not spend build-window time tuning
+dwell thresholds for precise timing** — it is not what gets scored. The
+three-stage streaming cascade (YOLO+track → context rules → VLM) is still real
+and still the demo story for *why* a small model can do this cheaply, but the
+thing that actually produces the submitted label is a classifier, described
+below.
+
+## 1. Sanity check (run this FIRST, before anything else)
 
 ```
 %PY% -c "import torch; print('cuda', torch.cuda.is_available())"
 %PY% src\context_state.py --selftest
 %PY% src\vlm_reason.py --selftest --backend mock
 ```
+All three must print `PASS`/`True`. The last needs no weights and no network —
+if that works, the demo survives even with the wifi dead.
 
-All three must pass. The third needs no weights and no network — if that works,
-you can demo even with the wifi dead.
+## 2. If a NEW dataset drops on the day
 
----
-
-## 1. The real dataset just dropped
-
-Put the videos anywhere, e.g. `C:\dvad\data\real\`. Then, per video:
-
+The organisers' real pack (train+test, ~15–17GB) already has this exact shape
+and it is what every script below expects — the private evaluation set will
+almost certainly match it:
 ```
-:: (a) derive zones from observed motion - no hand-drawing, ~40s on 4K
-%PY% src\calibrate_zones.py --auto --source C:\dvad\data\real\clip1.mp4
-
-:: (b) LOOK AT THE PREVIEW before trusting it
-::     opens C:\dvad\data\real\clip1_zones.jpg - lanes should follow the road
-::     and the flow arrows should point the way traffic actually travels
-
-:: (c) run the pipeline
-%PY% src\pipeline.py --source C:\dvad\data\real\clip1.mp4 ^
-  --zones C:\dvad\data\real\clip1_zones.json ^
-  --decision rules --stop-seconds 20 --stride 2 ^
-  --save C:\dvad\outputs\clip1_annotated.mp4
+<data_dir>\train\<class_name>\videos\*.mp4  (+ videos.csv, ground_truth.csv)
+<data_dir>\test\videos\*.mp4                (+ videos.csv, ground_truth.csv)
 ```
+Every script here takes `--data_dir`, so a new drop is a one-flag swap —
+**do not hardcode a path**. If `test\ground_truth.csv` is absent (a genuinely
+private set), everything still runs; you simply cannot self-score, only
+produce `predictions.csv` and submit it blind.
 
-If auto-calibration produces nonsense (unusual camera angle, static scene, no
-vehicle motion to learn from), fall back in this order:
-
+The 12 official class strings (must match exactly, enforced by
+`label_map.validate_label`):
 ```
-%PY% src\calibrate_zones.py --draw --source ...        :: draw by hand, 1-2 min
-%PY% src\calibrate_zones.py --whole-frame --source ... :: instant, crude
+normal, traffic_accident, traffic_congestion, stalled_or_broken_down_vehicle,
+vehicle_blocking_traffic, wrong_way_driving, road_spill_or_debris,
+waterlogging_or_flood, fire, smoke, fighting_or_violence,
+loitering_or_suspicious_presence
 ```
 
-Or just omit `--zones` entirely — Stage 2 treats unmapped areas as lane-like
-and still triggers, it simply loses the parking/shoulder distinction.
+## 3. The winning pipeline, end to end
 
-### Whole folder at once
-```
-%PY% src\pipeline.py --data_dir C:\dvad\data\real --limit-videos 0 --decision rules
-```
-
-## 1a-CRITICAL. Drone footage — use the fine-tuned weights AND `--aerial`
+This is what actually produces score. Five steps, in order:
 
 ```
-%PY% src\pipeline.py --source <drone_clip> --zones <zones> --decision rules ^
+:: 1. Train the appearance classifier (LOCAL, GTX 1650, ~15-20 min for 12
+::    epochs; extraction/caching is cached so a rerun is much faster). This is
+::    the thing that catches fire/smoke/flood/debris/fighting/loitering/
+::    wrong-way/congestion/blocking - conditions a motion tracker structurally
+::    cannot see because they are visible in a SINGLE frame, not defined by
+::    movement. Rules-only scored F1 0.0 on every one of these.
+%PY% src\train_appearance.py --data_dir <data_dir> --epochs 12
+
+:: 2. Dump per-video class probabilities on the test split
+%PY% src\appearance_classifier.py --data_dir <data_dir> --split test ^
+  --weights C:\dvad\models\appearance11.pt --dump C:\dvad\outputs\app_scores.json
+
+:: 3. Pick the decision rule by sweeping against the REAL scorer (not a guess -
+::    the threshold was guessed twice before and missed twice; an 11-class head
+::    spreads probability mass differently than a 7-class one did)
+%PY% src\tune_appearance.py --scores C:\dvad\outputs\app_scores.json ^
+  --gt <data_dir>\test\ground_truth.csv --write C:\dvad\outputs\predictions.csv
+
+:: 4. Score it locally (only works if test\ground_truth.csv exists - the
+::    organisers ship it on the PUBLIC set specifically so this step is possible
+::    before the private submission)
+%PY% src\score_submission.py --gt <data_dir>\test\ground_truth.csv ^
+  --pred C:\dvad\outputs\predictions.csv
+
+:: 5. predictions.csv is the submission. Sanity-check the row count matches
+::    the number of test videos (a missing video_id scores worse than a wrong
+::    guess - both run_ahc_dataset.py and tune_appearance.py already backfill
+::    a `normal` row for any video with no score, keep it that way).
+```
+
+**Do not run other heavy GPU/CPU jobs alongside step 1.** Measured: free RAM
+hit 1.4GB of 7.5GB and epochs slowed ~5x from contention when a scoring job ran
+concurrently. It is CPU-bound on JPEG decode (`num_workers=0`, deliberate for
+an 8GB machine).
+
+### If a private/day-of test set arrives with NO `ground_truth.csv`
+Steps 1–3 are unchanged (`--data_dir` still points at wherever `train/` lives —
+reuse the checkpoint from the day's earlier training run, no need to retrain
+unless the class folders changed). Skip step 4 (nothing to score against) and
+submit `predictions.csv` from step 3 directly. If time allows, use the
+DECISION RULE already validated on the public test set (see §5) rather than
+re-tuning blind on a set with no way to check the result — an untested rule
+picked to look good on a training-adjacent proxy is a worse bet than a rule
+already measured to generalise once.
+
+## 4. Recovering the one class the classifier deliberately does NOT own
+
+`stalled_or_broken_down_vehicle` is excluded from the classifier's positive
+classes on purpose — only 4 training videos, too few to model, and it is the
+motion rules' single most reliable true positive (a track stationary in a live
+lane for `--stop-seconds`, unconfounded with parking/shoulder by zone
+calibration). To recover it without touching the classifier:
+```
+%PY% src\run_ahc_dataset.py --data_dir <data_dir> --split test ^
+  --label-source hybrid --appearance-weights C:\dvad\models\appearance11.pt ^
+  --appearance-threshold 0.15 --out C:\dvad\outputs\pred_hybrid.csv
+%PY% src\score_submission.py --gt <data_dir>\test\ground_truth.csv --pred C:\dvad\outputs\pred_hybrid.csv
+```
+This costs ~20–40s per video (the full motion pipeline runs alongside the
+~0.3s classifier call) to recover one class on one video. **Compare the
+resulting macro-F1 against step 3's plain-classifier result and keep whichever
+actually scores higher** — do not assume the hybrid path wins just because it
+does more work. As of last measurement the classifier-only path is proven; the
+hybrid path was written but its net effect on the score had not yet been
+checked end to end. Verify before trusting it in a demo.
+
+## 5. Findings already measured — do not re-litigate these under time pressure
+
+- **Per-class decision thresholds fitted on the 34-video PUBLIC TEST SET
+  overfit it.** `tune_appearance.py --per-class` lifts in-sample macro-F1 to
+  0.289, but its own `--cv` (leave-one-video-out) check returns 0.230 — *worse*
+  than the plain global rule's ~0.245–0.256. Reproduce:
+  `tune_appearance.py --scores ... --gt ... --per-class --cv`. **Use the global
+  rule from step 3, not per-class thresholds tuned on test.**
+- **Per-class thresholds calibrated on the classifier's own held-out VAL split
+  (365 videos, never seen by the model) ALSO fail to transfer to test** —
+  measured macro-F1 **0.126**, worse than either of the above. This was tried
+  specifically because the val-overfitting explanation above implied a bigger,
+  genuinely-held-out calibration set should fix it; it didn't. The likely cause
+  is real domain shift, not sample size: the organisers explicitly separate
+  training-pool sources from the reserved test-set source at the video level,
+  so val (drawn from the training pool) is not a faithful proxy for test's
+  camera/scene distribution. Reproduce: `calibrate_thresholds.py --apply
+  C:\dvad\outputs\app_scores.json --gt <data_dir>\test\ground_truth.csv`.
+  **Conclusion: use the global rule. Per-class thresholds have failed twice,
+  fitted two different ways — do not try a third variant on the day.**
+- **Higher validation accuracy during training does not reliably mean a higher
+  test score**, for the same domain-shift reason. Measured: val macro-recall
+  climbed 0.650 → 0.742 across epochs 1→9, while test macro-F1 measured at an
+  early checkpoint (0.256) was *higher* than at a later, better-val checkpoint
+  (0.188 at epoch 6). **`train_appearance.py` currently keeps only the single
+  best-by-val-recall checkpoint, overwriting earlier ones** — so if you retrain
+  during the event, you cannot get back an earlier checkpoint that might score
+  better on test once it's gone. Consider running step 2–4 against a mid-training
+  checkpoint copy, not only the final one, before committing to a submission.
+  If retraining, copy `appearance11.pt` aside after a few early epochs as
+  insurance: `copy C:\dvad\models\appearance11.pt C:\dvad\models\appearance11_epochN.pt`.
+- **Speed-based congestion detection cannot work on this footage** — measured
+  with `diag_speeds.py`, a genuinely `normal` clip reads as MORE congested than
+  both ground-truth congestion clips at every speed threshold from 0.05 to
+  0.50. Box jitter on a few-pixel vehicle at low resolution swamps the speed
+  estimate; no threshold separates them. This is why `traffic_congestion` moved
+  to the appearance classifier instead of the motion rule.
+- **The test set is three datasets in one costume**: some clips are 5.7–26s,
+  some are 2fps with 30–706 total frames (track association and speed are pure
+  noise at 0.5s between frames), some are 240–629s. Six of 34 videos are
+  structurally hostile to any motion-based rule — one more reason the
+  appearance classifier, which only needs a handful of representative frames,
+  carries more of the score than the motion pipeline on this dataset.
+- **T030** is listed in `videos.csv`/`ground_truth.csv` but the video file is
+  missing from the public pack. Every submission-writer already backfills a
+  `normal` row for it — verify this still holds if the day-of set differs.
+
+## 6. Drone/night footage specifics (motion-rules path, still valid)
+
+```
+:: aerial + fine-tuned weights (4.3x recall over stock COCO defaults, measured
+:: on VisDrone: 0.661 vs 0.152 overall recall)
+%PY% src\pipeline.py --source <clip> --zones <zones> --decision rules ^
   --aerial --weights C:\dvad\models\yolo26n_visdrone.pt
+
+:: night: --night alone (lowers conf to 0.20) recovers ABOVE-daylight detection
+:: counts. Do NOT reach for CLAHE - measured 23.7->4.0fps and FEWER detections.
+%PY% src\pipeline.py --source <night_clip> --zones <zones> --decision rules --night
 ```
-
-Measured on real aerial imagery (VisDrone val, 5189 ground-truth objects):
-
-| detector + config | overall recall | small objects |
-|---|---|---|
-| stock COCO, default settings | 0.152 | 0.008 |
-| stock COCO + `--aerial` | 0.294 | 0.063 |
-| **fine-tuned + `--aerial`** | **0.661** | **0.440** |
-
-That is **4.3x** the recall it started with, and 7x on small objects — which is
-most of what a drone sees. Drop-in verified: day/night/aerial ground truth all
-detected 1.0, IoU 0.95–0.98, zero false positives, still real-time.
-
-The fine-tuned model also knows classes COCO does not: **van, tricycle,
-awning-tricycle, motor** — i.e. auto-rickshaws, which matters for Pune footage.
-
-If it ever misbehaves, fall back to stock by just dropping `--weights`; `--aerial`
-alone still doubles recall over defaults.
-
-## 1a-2. `--aerial` on its own (stock weights)
-
-```
-%PY% src\pipeline.py --source <drone_clip> --zones <zones> --decision rules --aerial
-```
-
-This is the single highest-impact flag in the system. Measured on VisDrone
-(real aerial imagery, 5189 ground-truth objects):
-
-| config | overall recall | small objects |
-|---|---|---|
-| default (imgsz 640, conf 0.25) | **0.152** | **0.008** |
-| `--aerial` (imgsz 1280, conf 0.10) | **0.413** | 0.149 |
-| imgsz 1536, conf 0.10 | **0.462** | 0.204 |
-
-**Default settings miss 85% of aerial objects and are blind to small ones.** Our
-own highway test clip was flattering because its vehicles were large and side-on.
-
-It does not cost real time: 41.7 fps with `--aerial` on 1080p, 3.33 feeds/GPU.
-For very high altitude, push further: `--imgsz 1536 --conf 0.1` (31.5 fps).
-
-**If the pipeline looks broken on their footage, this is the first thing to try —
-the fault will be Stage 1 detection, not the anomaly logic.** Sanity-check what
-the detector actually sees before touching thresholds:
+If the pipeline looks broken on unfamiliar footage, sanity-check Stage 1 alone
+before touching thresholds — the fault is almost always detection, not the
+anomaly logic:
 ```
 %PY% src\detect_track.py --source <clip> --imgsz 1280 --conf 0.1 --save C:\dvad\outputs\check.mp4
 ```
 
-## 1b. Night footage — add `--night`
+## 7. Demo script
 
-```
-%PY% src\pipeline.py --source <night_clip> --zones <zones> --decision rules --night
-```
-
-`--night` only lowers the detector confidence to 0.20. That is the whole fix, and
-it was chosen by measurement:
-
-- Night raw already keeps **90%** of the daylight detection count.
-- conf 0.20 recovers detections to **above** the daylight baseline (581 vs 530).
-- **Do NOT reach for CLAHE.** Measured on 4K it cost **23.7 → 4.0 fps** and found
-  *fewer* objects (468 vs 479). Histogram equalisation is a trap here.
-- End-to-end on simulated night: anomaly still caught at the identical timestamps,
-  IoU **0.971** (better than daylight), 0 false positives, 22.2 fps.
-
-Caveat: our night test is a luminance/noise simulation. Real night footage adds
-headlight glare and motion blur. If detection collapses on their real night clips,
-the first lever is still `--conf` (try 0.15), then `--imgsz 960`.
-
-## 1c. Benchmark datasets that ship as frame folders
-
-UCSD Ped, CUHK Avenue, ShanghaiTech and UCF-Crime ship numbered frames, not videos.
-Point `--source` at the folder — it is handled natively:
-
-```
-%PY% src\pipeline.py --source C:\dvad\data\benchmark\clip01 --decision rules
-```
-
-Frame folders carry no frame rate, so 25fps is assumed. **If the dataset states a
-different rate, set it** — every dwell threshold depends on it:
-
-```
-set DVAD_FRAME_SEQ_FPS=10
-```
-
----
-
-## 1d. What the system can flag (all class-agnostic, all from Stage 2)
-
-| Rule | Fires when | Rule verdict |
-|---|---|---|
-| `stopped_vehicle` | vehicle stationary > `--stop-seconds` in a live lane | anomalous, 0.55–0.85 (scales with dwell) |
-| ...but congested | most other vehicles are stopped too | **benign**, 0.2 — a jam is not an incident |
-| `person_in_roadway` | person in a driving lane | anomalous, 0.85 |
-| `loitering` | person stationary > `--loiter-seconds` (default 25) | 0.7 in a lane/restricted area, else 0.35 |
-| `wrong_way_vehicle` | heading deviates > `--wrong-way-tolerance` deg from calibrated flow | anomalous, 0.9 |
-| `crowd_density` | more live person tracks than `--crowd-count` (default 8) | benign 0.3 — the VLM decides if it's a queue or a problem |
-| `slow_vehicle` **(off by default)** | vehicle crawling vs the median of its moving neighbours, needs `--enable-slow-vehicle` | anomalous, 0.3–0.55 |
-
-**On `slow_vehicle`:** it works, but it is off by default on purpose — its
-thresholds were tuned against a single oblique clip and it costs 1 false
-positive on the aerial ground-truth run. Zero-false-positives is the strongest
-claim this system has; don't trade it for a rule you can't validate. If their
-footage has obvious crawling-vehicle anomalies, turn it on and **re-check the
-false positive count before demoing it**.
-
-The VLM can **escalate** any of these to 0.9 if it sees fire, smoke, a collision,
-debris or a crowd forming — matched against a fixed allow-list in
-`vlm_reason._is_real_hazard()`, not accepted from free-form model output. That
-list is deliberate: moondream once reported `hazard_type: "person"` for an
-ordinary crowd scene, which a looser check ("anything but 'none'") would have
-escalated to a false alert. It can never silently clear a stop the tracker
-measured.
-
-All three thresholds (`--loiter-seconds`, `--crowd-count`,
-`--wrong-way-tolerance`) and all six rules have been run against real footage
-with real detections, not just the synthetic selftest — see PROGRESS.md
-"RULE COVERAGE CLOSED" for the positive/negative control results.
-
-## 1e. Real-world distances (the car-length ruler)
-
-A detected vehicle is its own ruler — a car is ~4.4m, a truck ~8m, so
-metres-per-pixel comes straight off the box. No training, no camera intrinsics.
-Calibrated per-track, so perspective cancels itself.
-
-It also **refuses to guess**. Scale spread across the frame gives a free
-obliquity estimate; above `max_obliquity_for_speed` (2.5) the km/h figure is
-computed but withheld, because in an oblique view vehicles move along the depth
-axis and image-plane motion understates their real speed. Measured: the highway
-bridge view scores 3.32 and correctly suppresses a wrong 12 km/h reading.
-
-If Saturday's footage is near-nadir drone video, expect real km/h in the context
-string — check `features.traffic_flow_kmh_reliable` in the events jsonl.
-
-## 2. Tuning knobs, in the order you'll reach for them
-
-| Symptom | Fix |
-|---|---|
-| No alerts at all | lower `--stop-seconds` (try 8, then 5) |
-| Too many alerts | raise `--stop-seconds`, raise `--cooldown` |
-| Missing small/distant objects | `--conf 0.2`, or `--imgsz 960` |
-| Too slow / not real-time | `--stride 3`, or `--decision rules` |
-| Parked cars flagged as anomalies | calibrate zones so parking is labelled |
-| Everything reads "unmapped" | zones don't cover the road — re-run `--auto`, or raise `--dilate` |
-
----
-
-## 2b. ONE COMMAND for the demo
-
-Don't assemble flags in front of judges. This calibrates zones, runs the
-pipeline, writes the annotated video, and prints a readable results block:
-
-```
-%PY% src\demo.py --source <their_clip>
-%PY% src\demo.py --source <their_clip> --night
-%PY% src\demo.py --source <their_clip> --quick        :: first 300 frames
-```
-
-**Quote throughput from a `--no-video` run.** Encoding the annotated video costs
-more than the pipeline itself, so the default run understates you badly —
-measured on the 4K clip: 13.3 fps / 1.06 feeds-per-GPU with encoding vs
-**20.1 fps / 1.61** without. Show the video from the first run, quote the
-numbers from this one:
-```
-%PY% src\demo.py --source <their_clip> --no-video
-```
-
-Every step degrades gracefully — if zone calibration fails, the run still
-proceeds (unmapped areas are treated as lane-like and the rules still fire).
-
-## 3. Demo script (what to actually show)
-
-1. **The annotated video.** Red box + alert banner on the stopped vehicle,
-   green tracked boxes with dwell timers on everything else.
-2. **The cost argument.** From the run summary: Stage 3 fires on **~0.2% of
-   frames**. Cheap noticing, expensive reasoning only when earned. This is the
-   scaling story.
-3. **The eval numbers**, against a composited ground-truth anomaly:
+1. **The classifier's actual numbers on the real public test set** — lead with
+   this, it's the one number that's genuinely measured against organiser data,
+   not self-graded synthetic footage: macro-F1 (quote whatever step 4 measures
+   TODAY, with the checkpoint it came from — do not quote last night's number
+   from memory).
+2. **The architecture story**: three tiers doing three different jobs — a
+   motion tracker for things defined by HOW something moves (a stopped
+   vehicle, wrong-way driving), an always-on classifier for things that are
+   simply VISIBLE in one frame (fire, smoke, flooding, debris — measured to be
+   literally unreachable by motion rules, F1 0.0 on all four), and the VLM
+   reserved for open-vocabulary hazards neither can name in advance. All of it
+   runs on a 4GB GTX 1650 with no VLM in the runtime hot path for a normal
+   classification pass — the VLM is optional enrichment.
+3. **The honest engineering finding on the VLM boolean**: a 3B VLM cannot
+   reliably decide "is this anomalous" from a single still frame, because a
+   still frame contains no motion — measured at chance (3/6) across four
+   prompt revisions on the injected stopped-truck clip, while its *prose* was
+   consistently accurate. So the deterministic tracker owns the boolean; the
+   VLM only observes and may escalate, never silently clear. Full detail in
+   `CLAUDE.md`.
+4. **The annotated video** (motion-rules path) as the visual — red box + alert
+   banner on a stopped vehicle, green tracked boxes with dwell timers on
+   everything else:
    ```
-   %PY% src\eval.py --ground-truth C:\dvad\data\vehicles_stopped_ground_truth.json ^
-     --predictions C:\dvad\outputs\events_rules.jsonl ^
-     --run-summary C:\dvad\outputs\summary_rules.json
+   %PY% src\demo.py --source <clip>
    ```
-   detection rate 1.0 · IoU 0.949 · +5.1s latency (= the dwell threshold, so
-   exactly on time) · **0 false alerts before the anomaly existed**.
-4. **The honest engineering finding** — this is a strength, not an apology.
-   We measured that a 3B VLM cannot reliably decide "is this anomalous" from a
-   single frame, because *a still frame contains no motion*. It scored at chance
-   across four prompt revisions while describing the scene correctly. So the
-   deterministic tracker owns the boolean and the VLM does what it is genuinely
-   good at: seeing hazards and explaining the scene. Details in CLAUDE.md.
 
----
+## 8. If the wifi dies
 
-## 4. If the wifi dies
+Nothing in the demo path needs the network, tested with all external traffic
+routed to an unroutable address: `--decision rules --aerial` and
+`--decision hybrid --backend ollama` both completed correctly.
+- YOLO weights and the appearance classifier checkpoint are cached locally in
+  `C:\dvad\models\`.
+- Ollama serves on `localhost:11434` — loopback, works with wifi down.
+- `--decision rules` needs no model call at all; `--backend mock` runs the
+  whole pipeline with zero weights.
+- Steps 1–4 above (training, dumping, tuning, scoring) are all 100% local and
+  need no network whatsoever.
 
-Nothing in the demo path needs the network - and this was actually tested, not
-just reasoned about: with all external traffic routed to an unroutable address
-(a real network blackhole, external DNS/HTTP genuinely unreachable), both
-`--decision rules --aerial` (24.8s, correct detection) and `--decision hybrid
---backend ollama` (real 15.9s local inference call) completed correctly.
-- YOLO weights are cached in `C:\dvad\models\`
-- Ollama serves locally on `localhost:11434` - loopback traffic, never touches
-  the network hardware, works identically whether wifi is up or down
-- `--decision rules` needs no model at all
-- `--backend mock` runs the whole pipeline with zero weights
-- Ultralytics telemetry (`sync`) is disabled - one less thing that could try
-  to phone home and stall
+## 9. Kaggle / VLM LoRA fine-tune — optional stretch, currently blocked
 
-Only the *teacher labelling* and *Kaggle upload* need internet, and those are
-offline-prep steps, not demo steps.
+`build_vlm_dataset.py` converts the organisers' `description_summary` captions
+plus the frame cache into Unsloth-ready `train.jsonl`/`val.jsonl`. It is
+written and has never been run end to end. **It cannot start until Kaggle
+Settings → Phone Verification is completed** (no GPU accelerator without it).
+Use the **T4**, never the P100 (`machine_shape: "NvidiaTeslaT4"` — the default
+P100 dies at `get_peft_model` with current bitsandbytes/Unsloth kernels).
 
----
+Only attempt this if steps 1–4 above are done, scored, and submitted first —
+the local classifier already carries the score, and a fine-tune landing after
+venue wifi degrades cannot be relied on for the demo.
 
-## 5. Training half
-
-One-time setup:
 ```
-:: Groq gives a free key with 14,400 requests/day - console.groq.com/keys
-setx GROQ_API_KEY "gsk_..."          :: then open a NEW terminal
-```
-
-**Kaggle is already set up and verified** — authenticated as `guptaneeraj123`,
-upload and versioning both tested against a real private dataset. Nothing to do.
-If it ever needs redoing (Kaggle now uses a standalone `KGAT_...` token, not
-kaggle.json):
-```
+:: one-time setup if not already done
 %PY% src\setup_kaggle.py --token KGAT_xxxxxxxx
 %PY% src\setup_kaggle.py --verify-only
-```
 
-Then:
-```
-:: harvest candidates (no model needed, works offline)
-%PY% src\pipeline.py --source <clip> --zones <zones> --no-vlm ^
-  --stop-seconds 5 --cooldown 4 --sample-normal 10 --stride 2 ^
-  --out C:\dvad\outputs\harvest_events.jsonl
+:: build the VLM dataset from real organiser captions (once phone-verified)
+%PY% src\build_vlm_dataset.py --data_dir <data_dir> --out C:\dvad\data\vlm_dataset
 
-:: check the plan first, ALWAYS
-%PY% src\distill_label.py --events C:\dvad\outputs\harvest_events.jsonl --dry-run
-
-:: label with the free Groq teacher (Llama 4 Scout, vision)
-%PY% src\distill_label.py --events C:\dvad\outputs\harvest_events.jsonl --limit 40
-
-:: if that model id has drifted, ask the provider what exists
-%PY% src\distill_label.py --provider groq --list-models
-
-:: package + upload
-%PY% src\build_kaggle_dataset.py --labels C:\dvad\data\pseudo_labels.jsonl --push
-```
-
-Provider fallbacks: `--provider openrouter` (free but only **50 requests/day** on a
-zero balance) or `--provider anthropic` (paid, best teacher quality).
-
-Then run the fine-tune from the CLI — no browser clicks:
-```
+:: run the fine-tune from the CLI, no browser clicks
 %PY% src\push_notebook.py --push --slug dvad-finetune-qwen2-5-vl --title "dvad finetune qwen2 5 vl"
 %PY% src\push_notebook.py --wait  --slug dvad-finetune-qwen2-5-vl
 %PY% src\push_notebook.py --pull  --slug dvad-finetune-qwen2-5-vl
 ```
-
-Two Kaggle traps already hit and fixed — do not re-introduce them:
-- **The URL slug comes from the TITLE, not the id.** "DVAD finetune Qwen2.5-VL"
-  became `dvad-finetune-qwen2-5-vl`, so `--status` 404'd on a kernel that existed.
-  Keep `--slug` and `--title` consistent.
-- **nbformat needs a trailing `\n` on every source line.** Without it Kaggle joins
-  the cell onto ONE line: a cell starting with `#` silently becomes a comment and
-  does nothing, and a code cell dies with "SyntaxError: incomplete input".
-  `notebooks/build_notebook.py` regenerates the notebook and asserts this.
-
-If you edit the notebook, regenerate it rather than hand-editing the JSON:
-```
-%PY% notebooks\build_notebook.py
-```
+Two Kaggle traps already hit and fixed — do not reintroduce them:
+- **The URL slug comes from the TITLE, not the id.** Keep `--slug` and
+  `--title` consistent or `--status` 404s on a kernel that exists.
+- **nbformat needs a trailing `\n` on every source line**, or Kaggle joins a
+  cell onto one line and it silently breaks. `notebooks\build_notebook.py`
+  regenerates the notebook and asserts this — if you edit it, regenerate,
+  don't hand-edit the JSON.
