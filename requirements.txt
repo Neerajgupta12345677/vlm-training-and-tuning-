@@ -1,0 +1,26 @@
+# Local inference/dev stack. Python 3.11, native Windows (NOT WSL).
+# Recreate with:
+#   py -3.11 -m venv C:\dvad\.venv
+#   C:\dvad\.venv\Scripts\python.exe -m pip install -r requirements.txt
+#
+# torch is NOT listed here because it needs the CUDA index. Install it first:
+#   C:\dvad\.venv\Scripts\python.exe -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+# cu128 is deliberate: it still ships sm_75 kernels, which the GTX 1650 needs.
+# Verified working: torch 2.11.0+cu128, sm_75 present in torch.cuda.get_arch_list().
+
+# supervision <0.31 is a HARD pin, not caution: sv.ByteTrack is deprecated and
+# is scheduled for REMOVAL in 0.31.0, and 0.30.1 ships no replacement tracker.
+# An unpinned upgrade would break Stage 1 with no migration path available.
+supervision==0.30.1
+
+ultralytics==8.4.138
+opencv-python==5.0.0.93
+numpy==2.4.6
+pydantic==2.13.5
+requests==2.34.2
+anthropic==1.3.0
+kaggle==2.2.4
+
+# Local VLM runtime is Ollama (installed separately, not a pip package):
+#   winget install --id Ollama.Ollama
+# Verified: ollama 0.33.2, serves on http://localhost:11434

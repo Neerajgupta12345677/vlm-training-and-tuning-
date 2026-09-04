@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# Heavy artifacts live outside this repo, in C:\dvad (see CLAUDE.md "Paths").
+# Anything matching these names is either a stray local copy or a mistake.
+*.mp4
+*.avi
+*.mov
+*.pt
+*.pth
+*.safetensors
+*.zip
+models/
+data/
+outputs/
+
+.env
+kaggle.json
+access_token
