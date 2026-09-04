@@ -93,6 +93,7 @@ def run_one(video: Path, args, truncate_events: bool = True) -> dict:
             loiter_seconds=args.loiter_seconds,
             crowd_count=args.crowd_count,
             wrong_way_tolerance_deg=args.wrong_way_tolerance,
+            enable_slow_vehicle=args.enable_slow_vehicle,
             **({"duplicate_window_s": args.duplicate_window}
                if args.duplicate_window is not None else {}),
         ),
@@ -389,6 +390,11 @@ def main() -> None:
                    help="A person stationary this long (outside a sidewalk) is loitering.")
     p.add_argument("--crowd-count", type=int, default=8,
                    help="Live person tracks in view above this count triggers crowd_density.")
+    p.add_argument("--enable-slow-vehicle", action="store_true",
+                   help="Flag vehicles crawling relative to surrounding traffic. OFF by "
+                        "default: its thresholds were tuned against one oblique clip and "
+                        "it costs 1 false positive on the aerial ground-truth run. Turn on "
+                        "once you have footage you can validate it against.")
     p.add_argument("--wrong-way-tolerance", type=float, default=100.0,
                    help="Degrees of heading deviation from a lane's calibrated flow before "
                         "a vehicle counts as wrong-way.")

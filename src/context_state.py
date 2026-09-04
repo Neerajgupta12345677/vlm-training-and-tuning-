@@ -126,6 +126,11 @@ class TrackState:
     last_seen_s: float
     history: deque = field(default_factory=lambda: deque(maxlen=120))  # (t, cx, cy, diag)
     stationary_since_s: float | None = None
+    slow_since_s: float | None = None  # first frame it looked slow (for reporting)
+    # Rolling record of "was this frame slow relative to ambient?". Consistency
+    # over these is the trigger, not elapsed time - see TriggerConfig.
+    _slow_hist: deque = field(default_factory=lambda: deque(maxlen=20))
+    last_slow_ratio: float = 1.0
     stop_anchor: tuple[float, float] | None = None  # where it was when it stopped
     frame_diag: float = 1.0   # frame diagonal at ingest; used by the min-size gate
     box_diag: float = 0.0     # this object's box diagonal, same units
@@ -152,6 +157,23 @@ class TrackState:
         if self.stationary_since_s is None:
             return 0.0
         return max(0.0, self.last_seen_s - self.stationary_since_s)
+
+    @property
+    def slow_s(self) -> float:
+        if self.slow_since_s is None:
+            return 0.0
+        return max(0.0, self.last_seen_s - self.slow_since_s)
+
+    @property
+    def slow_fraction(self) -> float:
+        """Share of recent observations where this vehicle was crawling."""
+        if not self._slow_hist:
+            return 0.0
+        return sum(self._slow_hist) / len(self._slow_hist)
+
+    @property
+    def slow_observations(self) -> int:
+        return len(self._slow_hist)
 
     @property
     def is_vehicle(self) -> bool:
@@ -206,6 +228,34 @@ class TriggerConfig:
     stationary_speed: float = 0.05  # body-lengths/sec below which we call it stopped
     person_in_lane_seconds: float = 2.0
     loiter_seconds: float = 25.0    # a person stationary this long is loitering
+    # "Abnormally slow" is deliberately RELATIVE to surrounding traffic, never an
+    # absolute km/h. That makes congestion self-cancelling: in a jam the ambient
+    # median drops too, so a crawling vehicle is no longer an outlier and the
+    # rule stays quiet. Added after the 27B teacher flagged two cases our rules
+    # missed - both "truck moving at only 6 km/h in a live lane".
+    # OFF BY DEFAULT - deliberate. The rule is real and works, but it was tuned
+    # against a single oblique clip, and every threshold below was set by
+    # chasing false positives on that one video. On unknown footage that is a
+    # liability, and it costs the zero-false-positive property that is the
+    # strongest claim this system has. Enable with --enable-slow-vehicle once
+    # you have footage you can actually validate it against.
+    enable_slow_vehicle: bool = False
+    slow_ratio: float = 0.35        # below this fraction of ambient speed = crawling
+    slow_min_neighbours: int = 3    # need this many moving vehicles for a valid ambient
+    # Judged on CONSISTENCY, not elapsed time. Measured on this footage, tracks
+    # live only ~0.7-0.8s (vehicles cross frame fast, and ByteTrack re-acquires),
+    # so any multi-second dwell requirement can never be satisfied and the rule
+    # would be dead code. Instead: enough observations to be worth judging, and
+    # a clear majority of them slow.
+    slow_min_observations: int = 6  # fewer than this is not evidence, it is noise
+    slow_fraction: float = 0.7      # this share of recent observations must be slow
+    # Deliberately stricter than min_box_diag_frac (0.02) used by the stop rule.
+    # "Stopped" is a blunt dwell measurement that survives a small noisy box;
+    # "abnormally slow" is a RATIO of two small, noisy quantities, so it needs a
+    # clearer view of the object before the answer means anything. Measured:
+    # 72x52 and 83x98 boxes far up the road were the only remaining aerial
+    # false positives, and both sit below this floor.
+    slow_min_box_diag_frac: float = 0.05
     crowd_count: int = 8            # live person tracks that constitute a crowd
     crowd_cooldown_s: float = 45.0
     wrong_way_tolerance_deg: float = 100.0
@@ -337,6 +387,71 @@ class ContextStateTracker:
         reliable = obliquity is not None and obliquity <= self.cfg.max_obliquity_for_speed
         return float(np.median(speeds)), reliable
 
+    @staticmethod
+    def _total_motion(st: "TrackState") -> float:
+        """Apparent motion combining the image plane AND depth.
+
+        Neither component alone survives both camera geometries:
+          * A near-nadir view puts nearly all motion in the image plane, so
+            centroid speed works and scale change is ~0.
+          * An oblique view (this highway footage) puts nearly all motion along
+            the view axis, so centroid speed collapses toward 0 for everyone and
+            an image-plane-only comparison is meaningless.
+        Summing them gives one number that means "how much is this thing
+        actually moving" in either geometry, which is what a speed comparison
+        needs to be built on.
+        """
+        return st.norm_speed + st.scale_rate_med
+
+    def _ambient_speed(self, exclude_id: int | None = None) -> tuple[float | None, int]:
+        """Median total motion of MOVING vehicles in view, plus how many.
+
+        Returns (None, n) when there are too few moving vehicles to establish a
+        meaningful ambient - with nothing to compare against, "slow" is not a
+        judgement we are entitled to make.
+        """
+        speeds = [
+            self._total_motion(st) for tid, st in self.tracks.items()
+            if tid != exclude_id and st.is_vehicle
+            and st.last_seen_s >= self._now - 1.0
+            and st.norm_speed >= self.cfg.stationary_speed
+        ]
+        if len(speeds) < self.cfg.slow_min_neighbours:
+            return None, len(speeds)
+        return float(np.median(speeds)), len(speeds)
+
+    def _update_slow_latch(self, live_ids: set[int], det) -> None:
+        """Latch how long each vehicle has been crawling relative to ambient.
+
+        Runs after all tracks are ingested for the frame, because the ambient
+        median depends on every track's updated speed. Latched rather than
+        instantaneous so a car braking briefly for a junction does not fire.
+        """
+        for tid in live_ids:
+            st = self.tracks[tid]
+            if not st.is_vehicle:
+                continue
+            ambient, _n = self._ambient_speed(exclude_id=tid)
+            if ambient is None:
+                continue  # no ambient to compare against; record nothing
+            moving = st.norm_speed >= self.cfg.stationary_speed
+            if not moving:
+                continue  # a full stop is Rule 1's business, not this one
+            # Compare TOTAL motion (image plane + depth) against the same
+            # measure for its neighbours. An earlier attempt gated on absolute
+            # depth motion instead; that killed the aerial false positives but
+            # also made the rule inert on oblique footage, where essentially
+            # every vehicle is moving along the view axis. Comparing like with
+            # like fixes both cases.
+            ratio = self._total_motion(st) / ambient
+            st.last_slow_ratio = ratio
+            crawling = ratio < self.cfg.slow_ratio
+            st._slow_hist.append(crawling)
+            if crawling and st.slow_since_s is None:
+                st.slow_since_s = det.timestamp_s
+            elif not crawling and st.slow_fraction < self.cfg.slow_fraction:
+                st.slow_since_s = None
+
     def _stopped_ratio(self, exclude_id: int | None = None) -> tuple[int, int]:
         """(stopped_vehicles, total_vehicles) among currently-live vehicle tracks."""
         stopped = total = 0
@@ -361,11 +476,23 @@ class ContextStateTracker:
         ua = ((a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter)
         return inter / ua if ua > 0 else 0.0
 
+    @staticmethod
+    def _kind_family(kind: str) -> str:
+        """Group rules that describe the same underlying incident.
+
+        stopped_vehicle and slow_vehicle are one story - a vehicle not moving
+        as it should. Without this, a truck that stops, is briefly re-read as
+        crawling (box jitter around the stationary threshold), then stops again
+        raises alerts under two different kinds for a single incident.
+        """
+        return "impeded_vehicle" if kind in {"stopped_vehicle", "slow_vehicle"} else kind
+
     def _is_duplicate(self, kind: str, bbox) -> bool:
-        """True if a recent event of the same kind covered the same object."""
+        """True if a recent event about the same object and incident already fired."""
         cutoff = self._now - self.cfg.duplicate_window_s
         self._recent_alerts = [a for a in self._recent_alerts if a[0] >= cutoff]
-        return any(k == kind and self._iou(bbox, b) >= self.cfg.duplicate_iou
+        family = self._kind_family(kind)
+        return any(self._kind_family(k) == family and self._iou(bbox, b) >= self.cfg.duplicate_iou
                    for _t, b, k in self._recent_alerts)
 
     def _can_fire(self, st: TrackState) -> bool:
@@ -426,6 +553,10 @@ class ContextStateTracker:
                 if drift > self.cfg.move_release_bodylengths or depth_moving:
                     st.stationary_since_s = None
                     st.stop_anchor = None
+
+        # Needs every track's speed for this frame already updated, so it runs
+        # here rather than inside the ingest loop above.
+        self._update_slow_latch(live_ids, det)
 
         events: list[Event] = []
         for tid in live_ids:
@@ -552,6 +683,66 @@ class ContextStateTracker:
                 rule_anomalous=not jam,
                 rule_severity=0.2 if jam else round(min(0.85, 0.55 + st.stationary_s / 120.0), 2),
             )
+
+        # Rule 1b: vehicle crawling while the traffic around it flows normally.
+        # Ordered after Rule 1 so a genuine stop always wins; this catches the
+        # band between "stopped" and "normal", which the teacher flagged and the
+        # dwell rule alone could not see.
+        too_small_for_slow = (st.frame_diag > 1.0
+                              and st.box_diag / st.frame_diag < cfg.slow_min_box_diag_frac)
+        if (cfg.enable_slow_vehicle
+                and st.is_vehicle and lane_like and not too_small_for_slow
+                and st.slow_observations >= cfg.slow_min_observations
+                and st.slow_fraction >= cfg.slow_fraction):
+            ambient, n_moving = self._ambient_speed(exclude_id=st.track_id)
+            if ambient:
+                ratio = st.last_slow_ratio
+                flow_kmh, flow_ok = self._traffic_speed_kmh(exclude_id=st.track_id)
+                own_kmh = st.speed_kmh
+                obliquity = self.view_obliquity()
+                speed_ok = obliquity is not None and obliquity <= cfg.max_obliquity_for_speed
+                if flow_kmh and flow_ok and own_kmh and speed_ok:
+                    speed_txt = (f" It is doing about {own_kmh:.0f} km/h while surrounding "
+                                 f"traffic moves at about {flow_kmh:.0f} km/h.")
+                else:
+                    speed_txt = (f" It is moving at {ratio * 100:.0f}% of the speed of "
+                                 f"surrounding traffic.")
+                ctx = (
+                    f"A {st.class_name} (track {st.track_id}) has been moving abnormally "
+                    f"slowly in {phrase_zone(st.zone_kind)} for "
+                    f"{int(st.slow_fraction * 100)}% of the {st.slow_observations} "
+                    f"observations of it, while {n_moving} other vehicles nearby are "
+                    f"moving normally.{speed_txt}"
+                )
+                return Event(
+                    frame_idx=det.frame_idx,
+                    timestamp_s=det.timestamp_s,
+                    kind="slow_vehicle",
+                    track_id=st.track_id,
+                    class_name=st.class_name,
+                    zone_kind=st.zone_kind,
+                    bbox=st.last_xyxy,
+                    context=ctx,
+                    features={
+                        "slow_fraction": round(st.slow_fraction, 3),
+                        "slow_observations": st.slow_observations,
+                        "norm_speed": round(st.norm_speed, 4),
+                        "ambient_speed": round(ambient, 4),
+                        "speed_ratio": round(ratio, 3),
+                        "moving_neighbours": n_moving,
+                        "own_kmh": round(own_kmh, 1) if own_kmh else None,
+                        "traffic_flow_kmh": round(flow_kmh, 1) if flow_kmh else None,
+                        "kmh_reliable": bool(flow_ok and speed_ok),
+                    },
+                    # Less urgent than a dead stop, but a vehicle crawling in live
+                    # traffic is a genuine hazard. Severity scales with how
+                    # consistently slow it has been.
+                    rule_anomalous=True,
+                    # Capped below the stopped_vehicle range on purpose: a
+                    # crawling vehicle is a lesser incident than a dead stop,
+                    # and severity ordering should reflect that.
+                    rule_severity=round(min(0.55, 0.3 + 0.25 * st.slow_fraction), 2),
+                )
 
         # Rule 2: pedestrian in the roadway.
         if st.is_person and st.zone_kind == "driving_lane" and st.age_s >= cfg.person_in_lane_seconds:

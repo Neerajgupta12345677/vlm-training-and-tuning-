@@ -152,6 +152,14 @@ set DVAD_FRAME_SEQ_FPS=10
 | `loitering` | person stationary > `--loiter-seconds` (default 25) | 0.7 in a lane/restricted area, else 0.35 |
 | `wrong_way_vehicle` | heading deviates > `--wrong-way-tolerance` deg from calibrated flow | anomalous, 0.9 |
 | `crowd_density` | more live person tracks than `--crowd-count` (default 8) | benign 0.3 — the VLM decides if it's a queue or a problem |
+| `slow_vehicle` **(off by default)** | vehicle crawling vs the median of its moving neighbours, needs `--enable-slow-vehicle` | anomalous, 0.3–0.55 |
+
+**On `slow_vehicle`:** it works, but it is off by default on purpose — its
+thresholds were tuned against a single oblique clip and it costs 1 false
+positive on the aerial ground-truth run. Zero-false-positives is the strongest
+claim this system has; don't trade it for a rule you can't validate. If their
+footage has obvious crawling-vehicle anomalies, turn it on and **re-check the
+false positive count before demoing it**.
 
 The VLM can **escalate** any of these to 0.9 if it sees fire, smoke, a collision,
 debris or a crowd forming — matched against a fixed allow-list in

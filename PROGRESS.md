@@ -290,7 +290,7 @@ cancels perspective (a distant car has both a smaller box and smaller pixel moti
 - [x] 15 candidate events harvested and ready for the teacher
 - [x] Annotated demo video at `C:\dvad\outputs\demo_annotated.mp4`
 
-### CONCURRENT-STREAMS TEST (2026-09-05) - closes the "feeds/GPU is inferred" gap
+### CONCURRENT-STREAMS TEST (2026-09-04) - closes the "feeds/GPU is inferred" gap
 Previous feeds-per-GPU numbers (4.41 @ 1080p, 1.19 @ 4K) were single-stream
 latency inverted, never actually run concurrently. Tested for real: N separate
 OS processes, each loading its own YOLO26n copy into its own CUDA context
@@ -317,7 +317,7 @@ Reproduce: launch N `pipeline.py --stride 2` processes via `Start-Process`
 (not PowerShell `Start-Job` - crashed the shell with a StackOverflowException
 at 8 concurrent jobs; that crash was the job-management layer, not the GPU).
 
-### RULE COVERAGE CLOSED + a real escalation-safety bug found (2026-09-05)
+### RULE COVERAGE CLOSED + a real escalation-safety bug found (2026-09-04)
 Three rules had never touched real footage (`wrong_way_vehicle`, `loitering`,
 `crowd_density` w/ live VLM) - only the synthetic selftest. Also exposed that
 loiter_seconds/crowd_count/wrong_way_tolerance were not CLI flags at all
@@ -360,7 +360,7 @@ alone - see the boolean-judgement finding above):
 Full regression re-run clean after this fix: day/night/aerial ground truth all
 detected=1.0, IoU 0.94-0.98, 0 false positives; both selftests pass.
 
-### OFFLINE DRY RUN (2026-09-05) - actually tested, not just reasoned about
+### OFFLINE DRY RUN (2026-09-04) - actually tested, not just reasoned about
 No admin rights in this session, so the real network adapter / firewall
 couldn't be touched (`New-NetFirewallRule` -> Access Denied). Used the closest
 achievable substitute: routed all external HTTP through an unroutable proxy
@@ -391,6 +391,48 @@ it does when real wifi is down (loopback never touches the network hardware).
   push_notebook.py, setup_kaggle.py - these are pre-demo prep scripts that
   explicitly require network by design (Groq/Kaggle), never part of the live
   demo path, and SATURDAY.md already scopes them to "before Saturday."
+
+### slow_vehicle RULE - built, measured, then DEFAULTED OFF (2026-09-04)
+Added to close the recall gap where the 27B teacher flagged two cases we missed
+(both "truck moving at only 6 km/h in a live lane"). Ships behind
+`--enable-slow-vehicle`, OFF by default. The reasoning matters more than the code:
+
+What it does: compares a vehicle's motion to the MEDIAN of its moving
+neighbours, never an absolute km/h. That makes congestion self-cancelling - in
+a jam the ambient median drops too, so nobody is an outlier and the rule stays
+quiet. No separate congestion check needed.
+
+Three things measurement changed along the way:
+1. **Duration was the wrong test; consistency is.** Tracks on this footage live
+   only ~0.7-0.8s (vehicles cross frame fast, ByteTrack re-acquires), so the
+   original "slow for 5 seconds" could never be satisfied and the rule was dead
+   code. Now: >=6 observations AND >=70% of them slow.
+2. **The teacher was probably WRONG on one of its two flagged cases.** Track 13
+   has a median speed ratio of 1.000 - it moves at normal speed half the time.
+   The teacher saw one unlucky frame and had no motion history to know better.
+   Our rule correctly declines to fire on it. This is the architecture thesis
+   in miniature: the tracker has temporal information a single-frame VLM cannot
+   have. Do not "fix" this disagreement.
+3. **Image-plane speed alone fails in BOTH geometries.** Near-nadir puts motion
+   in the image plane; oblique puts it along the view axis (centroid speed
+   collapses toward zero for everyone). Gating on absolute depth motion killed
+   the aerial false positives but made the rule inert on oblique footage.
+   Fixed by comparing TOTAL motion (norm_speed + scale_rate_med) against the
+   same measure for neighbours - like against like, works in either geometry.
+
+Why it is off by default: after all that, it still cost 1 false positive on the
+aerial ground-truth run, and every threshold had been set by chasing FPs on a
+single clip. That is overfitting to one video, and zero-false-positives across
+538 frames is the strongest claim this system has. Not worth trading a large-
+sample result for a recall point measured on n=15 against a partly-wrong
+teacher. Turn it on when there is footage to validate it against.
+Verified: default config = 0 FP on day/night/aerial; `--enable-slow-vehicle`
+fires correctly when asked.
+
+Also fixed while here: stopped_vehicle and slow_vehicle now share a dedup
+"family" (`_kind_family`), so one impeded vehicle cannot raise two alerts under
+two different kind names; and slow severity is capped below the stopped range
+so a crawl never outranks a dead stop.
 
 ## Remaining after the blockers clear
 - [ ] `distill_label.py` on the 15 harvested events (~$0.10 with claude-opus-5)
