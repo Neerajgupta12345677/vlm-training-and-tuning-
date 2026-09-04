@@ -81,7 +81,10 @@ def build_push_dir(args) -> Path:
         # The YOLO notebook downloads VisDrone itself, so it needs no attachment.
         "dataset_sources": [] if args.no_dataset else [f"{user}/{args.dataset}"],
         "competition_sources": [],
-        "kernel_sources": [],
+        # Attaching a finished kernel as input lets a tiny follow-up kernel
+        # re-export just the artifact you want, instead of downloading a
+        # multi-GB output to reach one small file.
+        "kernel_sources": ([f"{user}/{args.kernel_source}"] if args.kernel_source else []),
     }
     (push_dir / "kernel-metadata.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     print(f"[meta] {meta['id']}  gpu={args.accelerator}  dataset={meta['dataset_sources']}")
@@ -104,6 +107,10 @@ def main() -> None:
     p.add_argument("--dataset", default="dvad-pseudo-labels")
     p.add_argument("--no-dataset", action="store_true",
                    help="Attach no dataset (the YOLO notebook fetches VisDrone itself).")
+    p.add_argument("--kernel-source", default=None,
+                   help="Slug of another of your kernels to attach as input, e.g. "
+                        "dvad-yolo-visdrone. Use to re-export one artifact from a "
+                        "finished run without pulling its whole output.")
     p.add_argument("--accelerator", default="NvidiaTeslaT4",
                    choices=["NvidiaTeslaT4", "NvidiaTeslaP100", "Tpu1VmV38"],
                    help="Leave on T4. P100 is sm_60 and current 4-bit kernels "

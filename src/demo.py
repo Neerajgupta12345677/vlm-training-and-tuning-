@@ -53,6 +53,10 @@ def main() -> None:
                    help="Aerial preset (default ON - drone footage needs it).")
     p.add_argument("--no-aerial", dest="aerial", action="store_false")
     p.add_argument("--night", action="store_true", help="Low-light preset.")
+    p.add_argument("--weights", default=None,
+                   help="Detector weights. Defaults to the VisDrone fine-tune at "
+                        "C:\\dvad\\models\\yolo26n_visdrone.pt when it exists (2.25x aerial "
+                        "recall), else stock. Pass 'stock' to force the COCO model.")
     p.add_argument("--stop-seconds", type=float, default=20.0)
     p.add_argument("--stride", type=int, default=2)
     p.add_argument("--quick", action="store_true", help="Cap at 300 frames for a fast pass.")
@@ -76,8 +80,19 @@ def main() -> None:
     annotated = outdir / f"demo_{stem}_annotated.mp4"
     zones = src.with_name(f"{stem}_zones.json") if src.is_file() else src.parent / f"{stem}_zones.json"
 
+    # Prefer the fine-tuned aerial detector when it is cached locally - it more
+    # than doubles recall on drone footage - but never hard-fail without it.
+    finetuned = Path(r"C:\dvad\models\yolo26n_visdrone.pt")
+    if args.weights and args.weights.lower() == "stock":
+        weights = None
+    elif args.weights:
+        weights = Path(args.weights)
+    else:
+        weights = finetuned if finetuned.exists() else None
+
     t_start = time.perf_counter()
     print(f"\nDEMO: {src}")
+    print(f"detector: {weights.name if weights else 'stock yolo26n (COCO)'}")
 
     # 1. Zones. Optional by design - the pipeline works without them, it just
     #    loses the parking/shoulder distinction.
@@ -102,6 +117,8 @@ def main() -> None:
         cmd += ["--save", str(annotated), "--save-width", "1280"]
     if zones.exists():
         cmd += ["--zones", str(zones)]
+    if weights:
+        cmd += ["--weights", str(weights)]
     if args.aerial:
         cmd.append("--aerial")
     if args.night:

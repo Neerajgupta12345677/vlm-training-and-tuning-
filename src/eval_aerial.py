@@ -37,12 +37,23 @@ VD_GROUP = {
     4: "vehicle", 5: "vehicle", 6: "vehicle", 9: "vehicle",
     7: "tricycle", 8: "tricycle",       # no COCO equivalent
 }
-# COCO name -> our collapsed group
-COCO_GROUP = {
+# Predicted class NAME -> our collapsed group. Covers both vocabularies so a
+# COCO-trained model and a VisDrone-trained model can be compared fairly on the
+# same footing: VisDrone emits pedestrian/people/van/motor, none of which exist
+# in COCO, and scoring those as misses would unfairly penalise the fine-tune.
+NAME_GROUP = {
+    # COCO
     "person": "person",
     "bicycle": "twowheel", "motorcycle": "twowheel",
     "car": "vehicle", "truck": "vehicle", "bus": "vehicle",
+    # VisDrone-only additions
+    "pedestrian": "person", "people": "person",
+    "van": "vehicle",
+    "motor": "twowheel",
+    # tricycles have no COCO equivalent; excluded from scoring on both sides
+    # so the comparison stays like-for-like
 }
+COCO_GROUP = NAME_GROUP  # kept as an alias; call sites use NAME_GROUP
 
 
 def load_gt(ann_path: Path) -> list[tuple[str, tuple[float, float, float, float]]]:
@@ -113,7 +124,7 @@ def main() -> None:
         if res.boxes is not None and len(res.boxes):
             n_det += len(res.boxes)
             for b, c in zip(res.boxes.xyxy.cpu().numpy(), res.boxes.cls.cpu().numpy()):
-                g = COCO_GROUP.get(model.names.get(int(c), ""), None)
+                g = NAME_GROUP.get(str(model.names.get(int(c), "")).lower(), None)
                 if g:
                     preds.append((g, tuple(b)))
 

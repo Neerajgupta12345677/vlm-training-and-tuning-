@@ -76,7 +76,32 @@ and still triggers, it simply loses the parking/shoulder distinction.
 %PY% src\pipeline.py --data_dir C:\dvad\data\real --limit-videos 0 --decision rules
 ```
 
-## 1a-CRITICAL. Drone footage — ALWAYS add `--aerial`
+## 1a-CRITICAL. Drone footage — use the fine-tuned weights AND `--aerial`
+
+```
+%PY% src\pipeline.py --source <drone_clip> --zones <zones> --decision rules ^
+  --aerial --weights C:\dvad\models\yolo26n_visdrone.pt
+```
+
+Measured on real aerial imagery (VisDrone val, 5189 ground-truth objects):
+
+| detector + config | overall recall | small objects |
+|---|---|---|
+| stock COCO, default settings | 0.152 | 0.008 |
+| stock COCO + `--aerial` | 0.294 | 0.063 |
+| **fine-tuned + `--aerial`** | **0.661** | **0.440** |
+
+That is **4.3x** the recall it started with, and 7x on small objects — which is
+most of what a drone sees. Drop-in verified: day/night/aerial ground truth all
+detected 1.0, IoU 0.95–0.98, zero false positives, still real-time.
+
+The fine-tuned model also knows classes COCO does not: **van, tricycle,
+awning-tricycle, motor** — i.e. auto-rickshaws, which matters for Pune footage.
+
+If it ever misbehaves, fall back to stock by just dropping `--weights`; `--aerial`
+alone still doubles recall over defaults.
+
+## 1a-2. `--aerial` on its own (stock weights)
 
 ```
 %PY% src\pipeline.py --source <drone_clip> --zones <zones> --decision rules --aerial

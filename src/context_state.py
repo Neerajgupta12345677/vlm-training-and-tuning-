@@ -29,8 +29,15 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-VEHICLE_NAMES = {"car", "motorcycle", "bus", "truck"}
-PERSON_NAMES = {"person"}
+# Both vocabularies, because the detector may be COCO-trained or
+# VisDrone-trained and Stage 2 keys off class NAMES. Missing an entry here does
+# not error - it silently makes Stage 2 ignore that class, which is why the
+# VisDrone-only names (van, motor, pedestrian, people) matter.
+VEHICLE_NAMES = {
+    "car", "motorcycle", "bus", "truck",          # COCO
+    "van", "motor", "tricycle", "awning-tricycle",  # VisDrone
+}
+PERSON_NAMES = {"person", "pedestrian", "people"}
 
 # Context strings go into the VLM prompt *and* into the training targets, so
 # they have to read as clean English. Naive formatting produced "in a unknown".
@@ -56,12 +63,22 @@ def phrase_zone(kind: str) -> str:
 # both a smaller box AND smaller pixel motion, so calibrating each track from
 # its own box cancels perspective instead of fighting it.
 EXPECTED_LENGTH_M = {
+    # COCO vocabulary
     "car": 4.4,
     "truck": 8.0,
     "bus": 11.0,
     "motorcycle": 2.1,
     "bicycle": 1.8,
     "person": 0.6,      # footprint from above, not height
+    # VisDrone vocabulary. Without these the ruler silently returns None and
+    # the km/h estimate quietly stops working for exactly the vehicle types
+    # Indian urban footage is full of - auto-rickshaws especially.
+    "van": 5.5,
+    "motor": 2.1,             # VisDrone's name for a motorcycle
+    "tricycle": 2.8,          # auto-rickshaw class of vehicle
+    "awning-tricycle": 3.0,
+    "pedestrian": 0.6,
+    "people": 0.6,
 }
 
 

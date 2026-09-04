@@ -434,7 +434,47 @@ Also fixed while here: stopped_vehicle and slow_vehicle now share a dedup
 two different kind names; and slow severity is capped below the stopped range
 so a crawl never outranks a dead stop.
 
-### VisDrone YOLO fine-tune - TRAINED OK, but the notebook wasted the output
+### *** VisDrone FINE-TUNE LANDED - 2.25x aerial recall, drop-in *** (2026-09-04)
+Weights cached at `C:\dvad\models\yolo26n_visdrone.pt` (5.2MB). Training:
+30 epochs on Kaggle T4, mAP50 0.137 -> 0.378, precision 0.483, recall 0.387.
+
+Same 100 VisDrone val images, same settings (imgsz 1024, conf 0.15):
+
+  group          stock COCO   fine-tuned    change
+  vehicle          0.522        0.836        +60%
+  person           0.291        0.655        +125%
+  twowheel         0.068        0.496        +629%
+  OVERALL          0.294        0.661        +125%  (2.25x)
+  tiny objects     0.063        0.440        +598%  (7x)
+
+Full journey on aerial recall: 0.152 (stock defaults) -> 0.294 (--aerial config)
+-> **0.661 (fine-tuned + --aerial)**. 4.3x from where this started.
+The tiny-object jump (0.063 -> 0.440) is the one that matters most for drone
+footage, where most objects are small.
+
+Drop-in verified - day/night/aerial ground truth all still detected=1.0,
+IoU 0.95-0.98, **0 false positives**, still real-time (21.1 fps, 1.68 feeds/GPU).
+Use with: `--weights C:\dvad\models\yolo26n_visdrone.pt`
+
+THREE silent-failure traps had to be fixed before these weights were usable.
+None of them would have raised an error - all three just quietly degrade:
+1. **Class filtering was by COCO id.** VisDrone ids mean different things
+   (0=pedestrian, 3=car, 4=van, 9=motor), so passing COCO ids filtered to a
+   wrong-but-plausible subset with no error. Now resolved by NAME against
+   whatever weights are loaded (`resolve_target_class_ids`), and returns None
+   ("don't filter") rather than an empty list, because detecting nothing
+   silently is the worse failure.
+2. **Stage 2's VEHICLE_NAMES/PERSON_NAMES didn't know the VisDrone names.**
+   A missing name does not error - Stage 2 just ignores that class. Added van,
+   motor, tricycle, awning-tricycle, pedestrian, people.
+3. **The car-length ruler had no entries for the new classes**, so
+   metres-per-pixel and the km/h estimate silently returned None for exactly
+   the vehicle types Indian urban footage is full of - auto-rickshaws included.
+   Added van 5.5m, tricycle 2.8m, awning-tricycle 3.0m, motor 2.1m, etc.
+Also fixed eval_aerial.py to score both vocabularies, or the comparison above
+would have unfairly marked every pedestrian/van/motor detection as a miss.
+
+### VisDrone fine-tune: the notebook wasted its own output
 Training completed on Kaggle T4 (~50 min, 30 epochs). Then pulling the result
 turned into a multi-GB download, because the notebook let ultralytics put the
 ~2GB VisDrone dataset inside `/kaggle/working` - and EVERYTHING under

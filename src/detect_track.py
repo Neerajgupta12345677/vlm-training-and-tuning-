@@ -19,10 +19,32 @@ from ultralytics import YOLO
 
 from common import MODELS_DIR, OUTPUTS_DIR, iter_frames, iter_frames_threaded, probe_video
 
-# COCO ids we care about for traffic/crowd scenes.
+# Class filtering is by NAME, resolved against whatever weights are loaded.
+# Doing it by COCO id was a silent-failure trap: VisDrone-trained weights use
+# entirely different ids (0=pedestrian, 3=car, 4=van, 9=motor...), so passing
+# COCO ids to them filters to a wrong-but-plausible set with no error at all.
+TARGET_NAMES = {
+    # COCO vocabulary
+    "car", "motorcycle", "bus", "truck", "person", "bicycle",
+    # VisDrone vocabulary
+    "van", "motor", "pedestrian", "people", "tricycle", "awning-tricycle",
+}
+
+# Kept for callers that still want the COCO view (e.g. get_sample_data).
 VEHICLE_CLASSES = {2: "car", 3: "motorcycle", 5: "bus", 7: "truck"}
 PERSON_CLASSES = {0: "person"}
 DEFAULT_CLASSES = sorted({*VEHICLE_CLASSES, *PERSON_CLASSES})
+
+
+def resolve_target_class_ids(model) -> list[int] | None:
+    """Map TARGET_NAMES onto the loaded model's own id space.
+
+    Returns None if nothing matches, which means "don't filter" rather than
+    "filter everything out" - silently detecting nothing is the worse failure.
+    """
+    names = getattr(model, "names", None) or {}
+    ids = [i for i, n in names.items() if str(n).lower() in TARGET_NAMES]
+    return sorted(ids) if ids else None
 
 # Preference order: YOLO26n is the Jan-2026 release (NMS-free, faster on CPU);
 # YOLO11n is the proven fallback if the installed ultralytics can't fetch it.
@@ -102,6 +124,10 @@ class Stage1Tracker:
 
     def __post_init__(self) -> None:
         self.model, self.model_name = load_detector(self.weights, self.device)
+        # Re-resolve the class filter against THESE weights' id space.
+        resolved = resolve_target_class_ids(self.model)
+        if resolved is not None:
+            self.classes = resolved
         # Two different rates, deliberately: timestamps come from the true frame
         # index at source fps (so dwell times stay real), while ByteTrack sees
         # the rate frames actually arrive at, which is what sizes its track
