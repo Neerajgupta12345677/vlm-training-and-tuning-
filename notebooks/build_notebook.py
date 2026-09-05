@@ -97,7 +97,13 @@ CONFIG = dict(
     # to a second NaN at step 141. A 40-step smoke test cannot catch a failure
     # that only appears past step 100; 200 does, at a real but bounded cost
     # (~35-45 min instead of another blind ~75 min full run).
-    max_steps    = 200 if SMOKE_TEST else 800,
+    # BATCHED training (see the warm-start cell): 400 steps per batch rather
+    # than 800 in one shot. Two reasons, both measured rather than cautious:
+    # every single-shot attempt died at a deterministic step (141, then ~657)
+    # once converged far enough, and a shorter batch that SAVES A USABLE
+    # CHECKPOINT beats a longer one that reaches further and then destroys
+    # itself. 400 also finishes in ~40 min, so a failure costs half as much.
+    max_steps    = 200 if SMOKE_TEST else 400,
     # Also raised with the step count - 60 samples cycled 13x over 200 steps
     # risks memorising the smoke subset rather than testing real dynamics.
     smoke_n      = 200,
@@ -112,7 +118,10 @@ CONFIG = dict(
     # nailing easy samples to near-zero loss while overshooting on harder
     # ones - a classic sign the LR is still too large for the fine-grained
     # regime once coarse fitting is done, even though it was fine at the start.
-    lr           = 5e-5,
+    # 5e-5 -> 3e-5 for the continuation batch. The model is already partly
+    # converged from batch 1, so large steps buy less and risk more - the
+    # late-stage divergences all happened AFTER convergence had set in.
+    lr           = 3e-5,
     # LENGTHENED, 5 -> 20 steps. A 5-step ramp reaches full LR while the model
     # is still only seeing the easiest, most templated samples, so the full
     # LR is already "too much" by the time harder samples arrive. A longer
@@ -120,7 +129,10 @@ CONFIG = dict(
     warmup_steps = 20,
     max_grad_norm = 0.3,     # Unsloth's own recipe uses this for LoRA vision SFT
     lora_r       = 16,
-    seed         = 3407,
+    # CHANGED per batch on purpose. The seed drives the shuffle, and the
+    # divergence was deterministic for a given seed - so batch 2 must NOT
+    # reuse 3407, or it re-creates the same batch ordering that killed v4/v5.
+    seed         = 1234,
     holdout      = 12,       # by-video val samples to eyeball after training
 )
 for k, v in CONFIG.items():
@@ -223,27 +235,56 @@ print(type(model).__name__, "loaded")
 ''')
 
 code(r'''
-# finetune_vision_layers=False: we are teaching a decision policy and a strict
-# JSON output format, which are language-side behaviours. Freezing the vision
-# tower trains faster and keeps the adapter small - it has to come back down a
-# slow link before Saturday. modules_to_save is omitted for the same reason.
-model = FastVisionModel.get_peft_model(
-    model,
-    finetune_vision_layers     = False,
-    finetune_language_layers   = True,
-    finetune_attention_modules = True,
-    finetune_mlp_modules       = True,
-    r              = CONFIG["lora_r"],
-    lora_alpha     = CONFIG["lora_r"],
-    lora_dropout   = 0,
-    bias           = "none",
-    random_state   = CONFIG["seed"],
-    use_rslora     = False,
-    loftq_config   = None,
-)
+# WARM START vs fresh LoRA.
+#
+# Training this in one 800-step shot kept dying at a DETERMINISTIC step (v2 and
+# v3 both at 141, v4 and v5 both at ~657) - same seed, same shuffle, so the same
+# physical batch lands at the same step every time and reliably destroys the
+# model once it has converged that far. Rather than keep fighting that exact
+# batch, this trains in BATCHES: warm-start from the last good checkpoint,
+# reshuffle with a DIFFERENT seed so the problem batch lands somewhere else
+# entirely (and at a different point in convergence), and continue.
+#
+# Deliberately a warm start (load adapter weights, fresh optimizer/schedule)
+# rather than a true resume_from_checkpoint: a true resume replays the same LR
+# schedule AND the same data order, which is exactly the combination that
+# diverged. Fresh optimizer + lower LR + new order is a genuinely different
+# trajectory, not a retry of the one that failed.
+import glob
+from pathlib import Path
+
+adapter_candidates = sorted(glob.glob("/kaggle/input/**/adapter_config.json", recursive=True))
+WARM_START_DIR = Path(adapter_candidates[0]).parent if adapter_candidates else None
+
+if WARM_START_DIR is not None:
+    from peft import PeftModel
+    print(f"WARM START from {WARM_START_DIR}")
+    model = PeftModel.from_pretrained(model, str(WARM_START_DIR), is_trainable=True)
+else:
+    print("fresh LoRA (no adapter checkpoint attached)")
+    # finetune_vision_layers=False: we are teaching a decision policy and a
+    # strict JSON output format, which are language-side behaviours. Freezing
+    # the vision tower trains faster and keeps the adapter small.
+    model = FastVisionModel.get_peft_model(
+        model,
+        finetune_vision_layers     = False,
+        finetune_language_layers   = True,
+        finetune_attention_modules = True,
+        finetune_mlp_modules       = True,
+        r              = CONFIG["lora_r"],
+        lora_alpha     = CONFIG["lora_r"],
+        lora_dropout   = 0,
+        bias           = "none",
+        random_state   = CONFIG["seed"],
+        use_rslora     = False,
+        loftq_config   = None,
+    )
+
 trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
 total = sum(p.numel() for p in model.parameters())
 print(f"trainable: {trainable:,} / {total:,} ({100*trainable/total:.3f}%)")
+assert trainable > 0, ("Adapter loaded but nothing is trainable - is_trainable=True "
+                       "was not honoured, so this run would do nothing.")
 ''')
 
 code(r'''
@@ -362,6 +403,12 @@ trainer = SFTTrainer(
         lr_scheduler_type  = "linear",
         seed               = CONFIG["seed"],
         output_dir         = "/kaggle/working/checkpoints",
+        # Explicit: HF defaults to save_steps=500, which on a 400-step batch
+        # would save NOTHING mid-run. Every prior failure was survivable only
+        # because a checkpoint happened to exist - make that guaranteed.
+        save_strategy      = "steps",
+        save_steps         = 100,
+        save_total_limit   = 3,
         report_to          = "none",
         remove_unused_columns = False,   # required for vision SFT
         dataset_text_field    = "",

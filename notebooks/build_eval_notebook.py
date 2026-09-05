@@ -106,7 +106,7 @@ INSTRUCTION = (
     '"description_summary": "<one short sentence describing what you see>"}'
 )
 
-def predict(image_path, max_new_tokens=96):
+def predict(image_path, max_new_tokens=200):
     """Same explicit-kwargs + inference_mode + autocast pattern proven during
     training-time eval - positional image/text args on a 4-bit T4 previously
     produced NaN logits ("!!!!!!!" repeated), not a bad fine-tune."""
@@ -125,7 +125,14 @@ def predict(image_path, max_new_tokens=96):
 from PIL import Image
 import torch, time, json as _json
 
-results = []
+# MULTI-FRAME. The previous single-midpoint-frame eval missed every long
+# video it got wrong (T025/T026/T028/T031, all 240s+) - one frame out of
+# 6000-18846 cannot see an accident at second 30 of a 4-minute clip. Frames
+# per video now scale with duration (3 for short clips, up to 14 for the
+# 10-minute ones), and a video counts as anomalous if ANY frame sees
+# something: a real event is transient, so demanding agreement across all
+# frames would defeat the purpose of sampling more of them.
+per_frame = []
 t0 = time.time()
 for i, r in enumerate(rows):
     img_path = EVAL_ROOT / r["image"]
@@ -133,21 +140,55 @@ for i, r in enumerate(rows):
     parsed = None
     try:
         parsed = _json.loads(raw[raw.index("{"): raw.rindex("}") + 1])
-    except Exception as e:
+    except Exception:
         parsed = None
-    results.append({"video_id": r["video_id"], "raw": raw[:300], "parsed": parsed})
-    label = parsed.get("class_name") if parsed else "UNPARSEABLE"
-    print(f"[{i+1}/{len(rows)}] {r['video_id']:<8} -> {label}")
+    per_frame.append({"video_id": r["video_id"], "frame_idx": r.get("frame_idx"),
+                      "t_sec": r.get("t_sec"), "raw": raw[:300], "parsed": parsed})
+    if (i + 1) % 20 == 0 or i == 0:
+        lab = parsed.get("class_name") if parsed else "UNPARSEABLE"
+        print(f"[{i+1}/{len(rows)}] {r['video_id']} t={r.get('t_sec')}s -> {lab}")
 
 elapsed = time.time() - t0
-print(f"\ndone in {elapsed/60:.1f} min, {elapsed/len(rows):.1f}s/video average")
+print(f"\ndone in {elapsed/60:.1f} min, {elapsed/max(len(rows),1):.1f}s/frame")
+
+with open("/kaggle/working/eval_frames.jsonl", "w", encoding="utf-8") as f:
+    for row in per_frame:
+        f.write(_json.dumps(row) + "\n")
+
+from collections import defaultdict, Counter
+by_video = defaultdict(list)
+for r in per_frame:
+    by_video[r["video_id"]].append(r)
+
+results = []
+for vid, frames in by_video.items():
+    labels = [f["parsed"]["class_name"] for f in frames
+              if f["parsed"] and f["parsed"].get("class_name")]
+    anomalies = [l for l in labels if l != "normal"]
+    if anomalies:
+        # Most frequent anomaly wins: a real event usually persists across
+        # several sampled frames, while a one-off misfire does not.
+        label = Counter(anomalies).most_common(1)[0][0]
+        best = next(f for f in frames
+                    if f["parsed"] and f["parsed"].get("class_name") == label)
+        desc = best["parsed"].get("description_summary", "")
+        is_anom = True
+    else:
+        label, desc, is_anom = "normal", "", False
+    results.append({"video_id": vid, "class_name": label, "is_anomaly": is_anom,
+                    "description_summary": desc, "n_frames": len(frames),
+                    "n_anomaly_frames": len(anomalies),
+                    "votes": dict(Counter(labels))})
+    print(f"{vid:<8} {len(anomalies):2d}/{len(frames):2d} anomaly frames -> {label}")
 
 with open("/kaggle/working/eval_results.jsonl", "w", encoding="utf-8") as f:
     for row in results:
         f.write(_json.dumps(row) + "\n")
 
-parseable = sum(1 for r in results if r["parsed"] is not None)
-print(f"parseable: {parseable}/{len(results)}")
+parseable = sum(1 for r in per_frame if r["parsed"] is not None)
+print(f"\nframe-level parseable: {parseable}/{len(per_frame)}")
+print(f"videos with >=1 anomaly frame: "
+      f"{sum(1 for r in results if r['is_anomaly'])}/{len(results)}")
 ''')
 
 md(r"""
