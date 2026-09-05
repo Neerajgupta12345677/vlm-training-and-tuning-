@@ -1,5 +1,47 @@
 # Progress Log (append short bullets only, newest at top)
 
+## Status (2026-09-05 09:45): macro-F1 0.61, verified. Four wins landed this morning: stalled/blocking gate, targeted multi-frame merge, surgical ckpt400 (road_spill fix), YOLO tuning gap closed.
+
+- Score progression today, every step independently re-verified before
+  promoting: 0.442 -> 0.526 (stalled/blocking gate) -> 0.568 (targeted
+  multi-frame merge) -> **0.61** (surgical ckpt400 merge). Old files kept at
+  every step (`predictions_OLD_0.442.csv` through `predictions_OLD_0.568.csv`)
+  - never delete these.
+- `dvad-ft-batch2` (warm-started continuation from checkpoint-500, new seed
+  1234, lr 3e-5) completed all 400 steps with ZERO non-finite losses -
+  confirms the batching+reseed fix for the deterministic divergence
+  genuinely worked. Evaluated properly (not assumed): checkpoint-400 alone
+  scores macro-F1 0.437 (multi-frame, min_frames=2), beating checkpoint-500's
+  0.323/0.346. Crucially, `road_spill_or_debris` went from F1 0.0 to 0.5 -
+  directly confirms the "checkpoint-500 was undertrained on this class"
+  diagnosis from the morning audit.
+- Swapped in WHOLESALE, the full combination with checkpoint-400 scored
+  WORSE (0.459) than the existing 0.568 base - it regressed on
+  traffic_accident and stalled_vehicle even as it improved elsewhere. Same
+  lesson as the multi-frame merge: identify the ONE genuine, ground-truth-
+  verified true positive it adds (T019, road_spill_or_debris) and merge only
+  that single row, leaving everything else untouched. This is now the
+  established pattern for adding a new model/checkpoint: never swap wholesale,
+  always verify against ground truth first and merge surgically.
+- **YOLO tuning gap closed.** Found (while answering "have we tuned YOLO")
+  that today's motion-rules run used STOCK COCO weights, not the fine-tuned
+  `yolo26n_visdrone.pt` (2.25x aerial recall, 7x on tiny objects, verified
+  weeks ago) - `run_ahc_dataset.py --weights` defaults to None and was never
+  passed. Re-ran with the fine-tuned weights: overall rules score unchanged
+  (0.09, the rules pipeline's other problems - congestion, wrong-way - are
+  not detector-quality issues), and the stalled/blocking gate's actual signal
+  (T010) is identical either way - but the fine-tuned weights are now
+  correctly wired in going forward, closing a real gap even though it didn't
+  move today's number. Checked for regressions first: the better weights
+  introduce some NEW noise on other videos (T004/T024/T009 falsely say
+  "stalled") but none of those currently hold a `vehicle_blocking_traffic`
+  combined verdict, so the gate cannot mis-fire on them.
+- Diagnosed (no cheap fix found) `fighting_or_violence`: both the classifier
+  (confidently wrong, loitering=0.93) and the VLM (defaults to templated
+  "normal") fail on T021/T022 for different reasons - neither has any motion
+  evidence, and this class structurally needs it. Confirmed as a real,
+  currently-unclosed gap, not something more tuning fixes.
+
 ## Status (2026-09-05 08:40): end-to-end architecture audit done, fixing in progress. Two Kaggle jobs running (batch-2 continued fine-tune, adaptive multi-frame re-eval). Current submission macro-F1 0.442, freshly re-verified.
 
 - Full end-to-end gap audit performed (see HANDOVER.md for the complete
