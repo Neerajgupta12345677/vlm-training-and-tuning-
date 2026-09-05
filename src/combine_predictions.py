@@ -24,10 +24,26 @@ priority rule, not a fitted threshold - it was NOT tuned against this test
 set, so it does not carry the overfitting risk that sank three earlier
 per-class-threshold attempts tonight (see PROGRESS.md).
 
+STALLED/BLOCKING GATE (--rules, optional): the motion-only pipeline scores
+macro-F1 0.09 ALONE on this test set and must never be fused broadly - it
+fires wrongly on far more videos than it fires correctly on. But video-by-
+video comparison found ONE narrow, architecturally-justified case it is
+uniquely right about: distinguishing `stalled_or_broken_down_vehicle` from
+`vehicle_blocking_traffic`. A still frame cannot tell "stopped, traffic still
+flows past" from "stopped, forcing others to swerve" - both classifier and
+VLM confuse these. The tracker measures it directly (whether the surrounding
+lane empties around the stopped vehicle). So: when the combined verdict is
+`vehicle_blocking_traffic` AND the rules' MAJORITY verdict for that video is
+`stalled_or_broken_down_vehicle`, trust the rules. The majority requirement
+(not "does it appear at all") matters - a long, noisy video can have the
+rules fire many different event types across its duration, and only a clear
+majority verdict is trustworthy evidence, not an incidental single mention.
+
     python src\\combine_predictions.py ^
         --classifier C:\\dvad\\outputs\\predictions_final.csv ^
         --vlm C:\\dvad\\outputs\\predictions_vlm_ckpt500.csv ^
         --gt C:\\dvad\\data\\ahc\\test\\ground_truth.csv ^
+        --rules C:\\dvad\\outputs\\pred_rules_for_fusion.csv ^
         --out C:\\dvad\\outputs\\predictions_combined.csv
 """
 
@@ -35,6 +51,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from collections import Counter
 from pathlib import Path
 
 from score_submission import load_csv, score
@@ -43,7 +60,21 @@ CSV_COLUMNS = ["video_id", "level", "is_anomaly", "class_name",
               "start_time_sec", "end_time_sec", "description_summary"]
 
 
-def combine(clf_rows: dict, vlm_rows: dict, all_videos: set[str]) -> list[dict]:
+def _rules_majority(rules_all_rows: list[dict]) -> dict[str, str]:
+    """video_id -> the rules pipeline's single most common class_name.
+
+    A long video can produce many rule-fired rows of different kinds across
+    its duration; only a clear majority verdict is trustworthy signal for the
+    stalled/blocking gate below, not an incidental single mention.
+    """
+    by_video: dict[str, list[str]] = {}
+    for r in rules_all_rows:
+        by_video.setdefault(r["video_id"], []).append(r["class_name"])
+    return {vid: Counter(labels).most_common(1)[0][0] for vid, labels in by_video.items()}
+
+
+def combine(clf_rows: dict, vlm_rows: dict, all_videos: set[str],
+           rules_majority: dict[str, str] | None = None) -> list[dict]:
     out = []
     for vid in sorted(all_videos):
         v = vlm_rows.get(vid)
@@ -55,6 +86,16 @@ def combine(clf_rows: dict, vlm_rows: dict, all_videos: set[str]) -> list[dict]:
         else:
             row = {"video_id": vid, "level": 3, "is_anomaly": "false", "class_name": "normal",
                    "start_time_sec": "", "end_time_sec": "", "description_summary": ""}
+
+        if (rules_majority and row["class_name"] == "vehicle_blocking_traffic"
+                and rules_majority.get(vid) == "stalled_or_broken_down_vehicle"):
+            row = dict(row)
+            row["class_name"] = "stalled_or_broken_down_vehicle"
+            row["description_summary"] = (
+                "stalled_or_broken_down_vehicle identified by the motion tracker "
+                "(surrounding traffic measured flowing past, not swerving around)."
+            )
+
         out.append(row)
     return out
 
@@ -65,6 +106,10 @@ def main() -> None:
     ap.add_argument("--classifier", required=True)
     ap.add_argument("--vlm", required=True)
     ap.add_argument("--gt", required=True)
+    ap.add_argument("--rules", default=None,
+                    help="Motion-rules-alone predictions (run_ahc_dataset.py --label-source "
+                         "rules), used ONLY for the narrow stalled/blocking gate - never "
+                         "fused broadly, it scores 0.09 alone. Omit to skip the gate.")
     ap.add_argument("--data_dir", default=None, help="Kept for interface parity.")
     ap.add_argument("--out", default=r"C:\dvad\outputs\predictions_combined.csv")
     args = ap.parse_args()
@@ -74,7 +119,12 @@ def main() -> None:
     gt_rows = load_csv(Path(args.gt))
     all_videos = {r["video_id"] for r in gt_rows}
 
-    combined = combine(clf_rows, vlm_rows, all_videos)
+    rules_majority = None
+    if args.rules:
+        rules_majority = _rules_majority(load_csv(Path(args.rules)))
+        print(f"[gate] loaded rules majority verdicts for {len(rules_majority)} video(s)")
+
+    combined = combine(clf_rows, vlm_rows, all_videos, rules_majority)
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
