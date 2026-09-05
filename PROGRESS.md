@@ -1,5 +1,56 @@
 # Progress Log (append short bullets only, newest at top)
 
+## Status (2026-09-05 08:40): end-to-end architecture audit done, fixing in progress. Two Kaggle jobs running (batch-2 continued fine-tune, adaptive multi-frame re-eval). Current submission macro-F1 0.442, freshly re-verified.
+
+- Full end-to-end gap audit performed (see HANDOVER.md for the complete
+  write-up). Key finding: macro-F1 averages 12 classes EQUALLY, so the 5
+  classes currently at F1 0.0 (fighting_or_violence, road_spill_or_debris,
+  vehicle_blocking_traffic, stalled_or_broken_down_vehicle,
+  wrong_way_driving) are worth 5 full points if fixed - far more than
+  polishing any already-working class. This is where the path to 0.70+ has
+  to come from.
+- Ran the motion-only pipeline (`--label-source rules`) against the REAL
+  test set for the first time (previously only tuned on synthetic clips).
+  Result: macro-F1 0.09 alone - confirms it must NOT be blindly fused, it
+  would hurt. But video-by-video comparison found one real, free win: rules
+  are the ONLY component that correctly identifies T010 as
+  stalled_or_broken_down_vehicle (classifier+VLM both call it
+  vehicle_blocking_traffic - a still frame cannot tell "traffic still flows
+  past" from "traffic swerves around", the tracker can). A narrow gate
+  (classifier says blocking AND rules say stalled -> trust rules) is worth
+  +0.056 macro-F1 with zero fitted parameters and zero risk to any
+  currently-correct video. Reproduce: `python src\run_ahc_dataset.py
+  --label-source rules --decision rules --out
+  C:\dvad\outputs\pred_rules_for_fusion.csv`, then compare against
+  predictions_final.csv per video.
+- Re-checked the earlier "multi-label emission would hurt" finding (T026,
+  the one video with 4 simultaneous GT labels) now that adaptive multi-frame
+  sampling exists - the earlier rejection was based on ONE frame; with 10
+  frames now sampled across that 240s video, different frames may show
+  different real events. Worth re-testing with a >=2-frame persistence
+  threshold once eval_frames.jsonl is available - not yet re-tested.
+- Launched `dvad-ft-batch2`: continues the interrupted VLM fine-tune from
+  checkpoint-500, warm-start (adapter weights + FRESH optimizer/schedule, not
+  a true resume) specifically because a true resume would replay the same LR
+  schedule and data order that diverged. New seed (1234, was 3407), lower LR
+  (3e-5, was 5e-5), save_steps=100 explicit (HF default 500 would save
+  nothing on a 400-step batch). Batches of 400 steps chosen because every
+  single-shot 800-step attempt died at a deterministic step once converged
+  far enough (v2/v3 at 141, v4/v5 at ~657) - shorter batches that save
+  checkpoints beat longer ones that reach further and then destroy
+  themselves.
+- Launched `dvad-vlm-eval-multi-run`: re-scores checkpoint-500 with adaptive
+  multi-frame sampling (3 frames for <=30s clips up to 14 for the
+  360-629s ones, 178 total vs 33 before) instead of one midpoint frame.
+  Measured root cause this targets: every long test video (240s+) that
+  scored wrong (T025/T026/T028/T031) did so because one frame out of up to
+  18,846 cannot see a transient event; short clips were mostly already
+  correct. Also fixed max_new_tokens 96->200 (T031's JSON was previously
+  truncated mid-string, silently unparseable).
+- HANDOVER.md fully rewritten to reflect all of tonight - previous version
+  predated the classifier rebalance, the fine-tune saga, and the combined-
+  model result entirely.
+
 ## Status: MAJOR WIN - combined classifier + fine-tuned VLM: macro-F1 0.442 (up from 0.262 classifier-alone, up from 0.188 tonight's start). This is the current safe submission, verified.
 
 - Kaggle fine-tune never reached a full clean 800 steps (5 attempts, each
