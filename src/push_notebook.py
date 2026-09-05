@@ -79,7 +79,8 @@ def build_push_dir(args) -> Path:
         "machine_shape": args.accelerator,
         "enable_internet": True,     # required: the notebook pip-installs Unsloth
         # The YOLO notebook downloads VisDrone itself, so it needs no attachment.
-        "dataset_sources": [] if args.no_dataset else [f"{user}/{args.dataset}"],
+        "dataset_sources": [] if args.no_dataset else
+                           [f"{user}/{d.strip()}" for d in args.dataset.split(",") if d.strip()],
         "competition_sources": [],
         # Attaching a finished kernel as input lets a tiny follow-up kernel
         # re-export just the artifact you want, instead of downloading a
@@ -104,7 +105,8 @@ def main() -> None:
     p.add_argument("--slug", default="dvad-finetune-qwen25vl")
     p.add_argument("--title", default="dvad finetune qwen25vl")
     p.add_argument("--notebook", default=None, help="Notebook to push (default: finetune_kaggle.ipynb).")
-    p.add_argument("--dataset", default="dvad-pseudo-labels")
+    p.add_argument("--dataset", default="dvad-pseudo-labels",
+                   help="Comma-separated slug(s) to attach, e.g. 'ds-one,ds-two'.")
     p.add_argument("--no-dataset", action="store_true",
                    help="Attach no dataset (the YOLO notebook fetches VisDrone itself).")
     p.add_argument("--kernel-source", default=None,
