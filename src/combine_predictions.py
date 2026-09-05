@@ -73,30 +73,39 @@ def _rules_majority(rules_all_rows: list[dict]) -> dict[str, str]:
     return {vid: Counter(labels).most_common(1)[0][0] for vid, labels in by_video.items()}
 
 
-def combine(clf_rows: dict, vlm_rows: dict, all_videos: set[str],
+def combine(clf_rows: dict, vlm_rows: dict[str, list[dict]], all_videos: set[str],
            rules_majority: dict[str, str] | None = None) -> list[dict]:
+    """`vlm_rows` is video_id -> A LIST of rows, not a single row - the VLM
+    submission can carry more than one label per video (multi-label
+    emission), and collapsing to "the last row in the file" for that video
+    would silently discard the rest. A video's VLM rows are used WHOLESALE
+    when any of them is non-normal; the classifier is only a fallback for
+    videos where the VLM asserted nothing but normal.
+    """
     out = []
     for vid in sorted(all_videos):
-        v = vlm_rows.get(vid)
+        v_list = [r for r in vlm_rows.get(vid, []) if r["class_name"] != "normal"]
         c = clf_rows.get(vid)
-        if v and v["class_name"] != "normal":
-            row = dict(v)
+
+        if v_list:
+            rows_for_video = [dict(r) for r in v_list]
         elif c:
-            row = dict(c)
+            rows_for_video = [dict(c)]
         else:
-            row = {"video_id": vid, "level": 3, "is_anomaly": "false", "class_name": "normal",
-                   "start_time_sec": "", "end_time_sec": "", "description_summary": ""}
+            rows_for_video = [{"video_id": vid, "level": 3, "is_anomaly": "false",
+                              "class_name": "normal", "start_time_sec": "",
+                              "end_time_sec": "", "description_summary": ""}]
 
-        if (rules_majority and row["class_name"] == "vehicle_blocking_traffic"
-                and rules_majority.get(vid) == "stalled_or_broken_down_vehicle"):
-            row = dict(row)
-            row["class_name"] = "stalled_or_broken_down_vehicle"
-            row["description_summary"] = (
-                "stalled_or_broken_down_vehicle identified by the motion tracker "
-                "(surrounding traffic measured flowing past, not swerving around)."
-            )
-
-        out.append(row)
+        for row in rows_for_video:
+            if (rules_majority and row["class_name"] == "vehicle_blocking_traffic"
+                    and rules_majority.get(vid) == "stalled_or_broken_down_vehicle"):
+                row = dict(row)
+                row["class_name"] = "stalled_or_broken_down_vehicle"
+                row["description_summary"] = (
+                    "stalled_or_broken_down_vehicle identified by the motion tracker "
+                    "(surrounding traffic measured flowing past, not swerving around)."
+                )
+            out.append(row)
     return out
 
 
@@ -115,7 +124,9 @@ def main() -> None:
     args = ap.parse_args()
 
     clf_rows = {r["video_id"]: r for r in load_csv(Path(args.classifier))}
-    vlm_rows = {r["video_id"]: r for r in load_csv(Path(args.vlm))}
+    vlm_rows: dict[str, list[dict]] = {}
+    for r in load_csv(Path(args.vlm)):
+        vlm_rows.setdefault(r["video_id"], []).append(r)
     gt_rows = load_csv(Path(args.gt))
     all_videos = {r["video_id"] for r in gt_rows}
 

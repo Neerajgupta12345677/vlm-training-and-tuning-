@@ -294,6 +294,10 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", default="cuda")
     p.add_argument("--extract-only", action="store_true")
+    p.add_argument("--save-every-epoch", action="store_true",
+                   help="Also save every epoch's checkpoint (not just the best-by-val one), "
+                        "so each can be scored against the REAL test set afterward - val and "
+                        "test recall are not guaranteed to agree (already measured once).")
     p.add_argument("--out", default=str(Path(MODELS_DIR) / "appearance_classifier.pt"))
     args = p.parse_args()
 
@@ -387,6 +391,19 @@ def main() -> None:
                         "classes": CLASSES, "img_size": IMG_SIZE,
                         "val_macro_recall": macro}, args.out)
             print(f"    -> saved {args.out} (macro_recall={macro:.3f})")
+
+        if args.save_every_epoch:
+            # val recall and TEST macro-F1 have already diverged once tonight
+            # (an earlier checkpoint's val rose while test fell) - keeping
+            # only the single best-by-val epoch made it impossible to check
+            # whether a DIFFERENT epoch would have scored higher on the real
+            # test set. Every epoch is cheap to keep (~6MB each); only the
+            # inability to compare them after the fact was expensive.
+            every_path = Path(args.out).with_name(
+                Path(args.out).stem + f"_epoch{ep}_{macro:.3f}.pt")
+            torch.save({"model_state_dict": model.state_dict(),
+                        "classes": CLASSES, "img_size": IMG_SIZE,
+                        "val_macro_recall": macro}, every_path)
 
     print(f"\n[done] best val macro recall {best:.3f} -> {args.out}")
 
