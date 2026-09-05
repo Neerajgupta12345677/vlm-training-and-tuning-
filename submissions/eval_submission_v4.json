@@ -1,0 +1,878 @@
+{
+ "schema_version": "1.0",
+ "predictions": [
+  {
+   "video_id": "E001",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "traffic accident visible in frame (appearance classifier, confidence 0.68)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 8,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 600.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 600.0,
+      "average_time_ms": 600.0,
+      "p50_time_ms": 600.0,
+      "p95_time_ms": 600.0,
+      "max_time_ms": 600.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E002",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "traffic accident visible in frame (appearance classifier, confidence 0.59)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 8,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 100.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 100.0,
+      "average_time_ms": 100.0,
+      "p50_time_ms": 100.0,
+      "p95_time_ms": 100.0,
+      "max_time_ms": 100.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E003",
+   "events": [],
+   "runtime_metadata": {
+    "frames_processed": 272,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 21610.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 21610.0,
+      "average_time_ms": 21610.0,
+      "p50_time_ms": 21610.0,
+      "p95_time_ms": 21610.0,
+      "max_time_ms": 21610.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E004",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "traffic accident visible in frame (appearance classifier, confidence 0.68)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 8,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 300.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 300.0,
+      "average_time_ms": 300.0,
+      "p50_time_ms": 300.0,
+      "p95_time_ms": 300.0,
+      "max_time_ms": 300.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E005",
+   "events": [
+    {
+     "class_name": "stalled_or_broken_down_vehicle",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "Rule 'stopped_vehicle' on measured tracker state."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 112,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 3670.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 3670.0,
+      "average_time_ms": 3670.0,
+      "p50_time_ms": 3670.0,
+      "p95_time_ms": 3670.0,
+      "max_time_ms": 3670.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E006",
+   "events": [],
+   "runtime_metadata": {
+    "frames_processed": 68,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 6930.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 6930.0,
+      "average_time_ms": 6930.0,
+      "p50_time_ms": 6930.0,
+      "p95_time_ms": 6930.0,
+      "max_time_ms": 6930.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E007",
+   "events": [
+    {
+     "class_name": "stalled_or_broken_down_vehicle",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "Rule 'stopped_vehicle' on measured tracker state."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 226,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 15620.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 15620.0,
+      "average_time_ms": 15620.0,
+      "p50_time_ms": 15620.0,
+      "p95_time_ms": 15620.0,
+      "max_time_ms": 15620.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E008",
+   "events": [
+    {
+     "class_name": "stalled_or_broken_down_vehicle",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "Rule 'stopped_vehicle' on measured tracker state."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 117,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 9740.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 9740.0,
+      "average_time_ms": 9740.0,
+      "p50_time_ms": 9740.0,
+      "p95_time_ms": 9740.0,
+      "max_time_ms": 9740.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E009",
+   "events": [
+    {
+     "class_name": "fire",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "fire visible in frame (appearance classifier, confidence 0.51)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 8,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 200.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 200.0,
+      "average_time_ms": 200.0,
+      "p50_time_ms": 200.0,
+      "p95_time_ms": 200.0,
+      "max_time_ms": 200.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E010",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "traffic accident visible in frame (appearance classifier, confidence 0.77)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 8,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 200.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 200.0,
+      "average_time_ms": 200.0,
+      "p50_time_ms": 200.0,
+      "p95_time_ms": 200.0,
+      "max_time_ms": 200.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E011",
+   "events": [
+    {
+     "class_name": "smoke",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "smoke visible in frame (appearance classifier, confidence 0.64)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 8,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 200.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 200.0,
+      "average_time_ms": 200.0,
+      "p50_time_ms": 200.0,
+      "p95_time_ms": 200.0,
+      "max_time_ms": 200.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E012",
+   "events": [
+    {
+     "class_name": "loitering_or_suspicious_presence",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "loitering or suspicious presence visible in frame (appearance classifier, confidence 0.88)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 8,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 300.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 300.0,
+      "average_time_ms": 300.0,
+      "p50_time_ms": 300.0,
+      "p95_time_ms": 300.0,
+      "max_time_ms": 300.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E013",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "traffic accident visible in frame (appearance classifier, confidence 0.42)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 8,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 200.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 200.0,
+      "average_time_ms": 200.0,
+      "p50_time_ms": 200.0,
+      "p95_time_ms": 200.0,
+      "max_time_ms": 200.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E014",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "traffic accident visible (confidence 0.60)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 138,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 7810.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 7810.0,
+      "average_time_ms": 7810.0,
+      "p50_time_ms": 7810.0,
+      "p95_time_ms": 7810.0,
+      "max_time_ms": 7810.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E015",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "traffic accident visible (confidence 0.88)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 187,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 13820.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 13820.0,
+      "average_time_ms": 13820.0,
+      "p50_time_ms": 13820.0,
+      "p95_time_ms": 13820.0,
+      "max_time_ms": 13820.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E016",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "traffic accident visible (confidence 0.85)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 244,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 12320.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 12320.0,
+      "average_time_ms": 12320.0,
+      "p50_time_ms": 12320.0,
+      "p95_time_ms": 12320.0,
+      "max_time_ms": 12320.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E017",
+   "events": [],
+   "runtime_metadata": {
+    "frames_processed": 450,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 36150.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 36150.0,
+      "average_time_ms": 36150.0,
+      "p50_time_ms": 36150.0,
+      "p95_time_ms": 36150.0,
+      "max_time_ms": 36150.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E018",
+   "events": [
+    {
+     "class_name": "fighting_or_violence",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "fighting or violence visible (confidence 0.76)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 450,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 36640.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 36640.0,
+      "average_time_ms": 36640.0,
+      "p50_time_ms": 36640.0,
+      "p95_time_ms": 36640.0,
+      "max_time_ms": 36640.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E019",
+   "events": [
+    {
+     "class_name": "loitering_or_suspicious_presence",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "loitering or suspicious presence visible (confidence 0.95)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 38,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 2510.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 2510.0,
+      "average_time_ms": 2510.0,
+      "p50_time_ms": 2510.0,
+      "p95_time_ms": 2510.0,
+      "max_time_ms": 2510.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E020",
+   "events": [
+    {
+     "class_name": "loitering_or_suspicious_presence",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "loitering or suspicious presence visible (confidence 0.62)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 38,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 2530.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 2530.0,
+      "average_time_ms": 2530.0,
+      "p50_time_ms": 2530.0,
+      "p95_time_ms": 2530.0,
+      "max_time_ms": 2530.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E021",
+   "events": [
+    {
+     "class_name": "wrong_way_driving",
+     "start_time_sec": 18.83,
+     "end_time_sec": 40.69,
+     "explanation": "wrong way driving visible (confidence 0.79)."
+    },
+    {
+     "class_name": "wrong_way_driving",
+     "start_time_sec": 59.83,
+     "end_time_sec": 79.6,
+     "explanation": "wrong way driving visible (confidence 0.79)."
+    },
+    {
+     "class_name": "wrong_way_driving",
+     "start_time_sec": 103.59,
+     "end_time_sec": 119.97,
+     "explanation": "wrong way driving visible (confidence 0.79)."
+    },
+    {
+     "class_name": "wrong_way_driving",
+     "start_time_sec": 144.59,
+     "end_time_sec": 161.01,
+     "explanation": "wrong way driving visible (confidence 0.79)."
+    },
+    {
+     "class_name": "wrong_way_driving",
+     "start_time_sec": 180.11,
+     "end_time_sec": 199.29,
+     "explanation": "wrong way driving visible (confidence 0.79)."
+    },
+    {
+     "class_name": "vehicle_blocking_traffic",
+     "start_time_sec": 26.4,
+     "end_time_sec": 35.84,
+     "explanation": "vehicle blocking traffic visible (confidence 0.63)."
+    },
+    {
+     "class_name": "vehicle_blocking_traffic",
+     "start_time_sec": 72.88,
+     "end_time_sec": 76.88,
+     "explanation": "vehicle blocking traffic visible (confidence 0.63)."
+    },
+    {
+     "class_name": "vehicle_blocking_traffic",
+     "start_time_sec": 100.83,
+     "end_time_sec": 119.97,
+     "explanation": "vehicle blocking traffic visible (confidence 0.63)."
+    },
+    {
+     "class_name": "vehicle_blocking_traffic",
+     "start_time_sec": 139.11,
+     "end_time_sec": 153.44,
+     "explanation": "vehicle blocking traffic visible (confidence 0.63)."
+    },
+    {
+     "class_name": "vehicle_blocking_traffic",
+     "start_time_sec": 180.11,
+     "end_time_sec": 199.29,
+     "explanation": "vehicle blocking traffic visible (confidence 0.63)."
+    },
+    {
+     "class_name": "vehicle_blocking_traffic",
+     "start_time_sec": 221.15,
+     "end_time_sec": 229.37,
+     "explanation": "vehicle blocking traffic visible (confidence 0.63)."
+    },
+    {
+     "class_name": "road_spill_or_debris",
+     "start_time_sec": 10.63,
+     "end_time_sec": 18.81,
+     "explanation": "road spill or debris visible (confidence 0.42)."
+    },
+    {
+     "class_name": "road_spill_or_debris",
+     "start_time_sec": 40.67,
+     "end_time_sec": 59.85,
+     "explanation": "road spill or debris visible (confidence 0.42)."
+    },
+    {
+     "class_name": "road_spill_or_debris",
+     "start_time_sec": 78.95,
+     "end_time_sec": 100.85,
+     "explanation": "road spill or debris visible (confidence 0.42)."
+    },
+    {
+     "class_name": "road_spill_or_debris",
+     "start_time_sec": 119.99,
+     "end_time_sec": 139.13,
+     "explanation": "road spill or debris visible (confidence 0.42)."
+    },
+    {
+     "class_name": "road_spill_or_debris",
+     "start_time_sec": 160.99,
+     "end_time_sec": 180.13,
+     "explanation": "road spill or debris visible (confidence 0.42)."
+    },
+    {
+     "class_name": "road_spill_or_debris",
+     "start_time_sec": 199.27,
+     "end_time_sec": 221.13,
+     "explanation": "road spill or debris visible (confidence 0.42)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 3000,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 202770.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 202770.0,
+      "average_time_ms": 202770.0,
+      "p50_time_ms": 202770.0,
+      "p95_time_ms": 202770.0,
+      "max_time_ms": 202770.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E022",
+   "events": [
+    {
+     "class_name": "stalled_or_broken_down_vehicle",
+     "start_time_sec": 144.0,
+     "end_time_sec": 172.08,
+     "explanation": "Rule 'stopped_vehicle' on measured tracker state."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 3000,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 201990.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 201990.0,
+      "average_time_ms": 201990.0,
+      "p50_time_ms": 201990.0,
+      "p95_time_ms": 201990.0,
+      "max_time_ms": 201990.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E023",
+   "events": [
+    {
+     "class_name": "traffic_congestion",
+     "start_time_sec": 10.63,
+     "end_time_sec": 35.21,
+     "explanation": "traffic congestion visible (confidence 0.97)."
+    },
+    {
+     "class_name": "traffic_congestion",
+     "start_time_sec": 94.56,
+     "end_time_sec": 180.96,
+     "explanation": "traffic congestion visible (confidence 0.97)."
+    },
+    {
+     "class_name": "fighting_or_violence",
+     "start_time_sec": 29.75,
+     "end_time_sec": 46.17,
+     "explanation": "fighting or violence visible (confidence 0.64)."
+    },
+    {
+     "class_name": "fighting_or_violence",
+     "start_time_sec": 65.31,
+     "end_time_sec": 76.25,
+     "explanation": "fighting or violence visible (confidence 0.64)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 3000,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 244670.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 244670.0,
+      "average_time_ms": 244670.0,
+      "p50_time_ms": 244670.0,
+      "p95_time_ms": 244670.0,
+      "max_time_ms": 244670.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E024",
+   "events": [],
+   "runtime_metadata": {
+    "frames_processed": 3597,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 271590.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 271590.0,
+      "average_time_ms": 271590.0,
+      "p50_time_ms": 271590.0,
+      "p95_time_ms": 271590.0,
+      "max_time_ms": 271590.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E025",
+   "events": [
+    {
+     "class_name": "stalled_or_broken_down_vehicle",
+     "start_time_sec": 115.4,
+     "end_time_sec": 123.4,
+     "explanation": "Rule 'stopped_vehicle' on measured tracker state."
+    },
+    {
+     "class_name": "stalled_or_broken_down_vehicle",
+     "start_time_sec": 331.27,
+     "end_time_sec": 339.47,
+     "explanation": "Rule 'stopped_vehicle' on measured tracker state."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 5400,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 380390.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 380390.0,
+      "average_time_ms": 380390.0,
+      "p50_time_ms": 380390.0,
+      "p95_time_ms": 380390.0,
+      "max_time_ms": 380390.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E026",
+   "events": [
+    {
+     "class_name": "loitering_or_suspicious_presence",
+     "start_time_sec": 145.54,
+     "end_time_sec": 180.86,
+     "explanation": "loitering or suspicious presence visible (confidence 0.84)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 613,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 47070.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 47070.0,
+      "average_time_ms": 47070.0,
+      "p50_time_ms": 47070.0,
+      "p95_time_ms": 47070.0,
+      "max_time_ms": 47070.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E027",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": 127.93,
+     "end_time_sec": 225.52,
+     "explanation": "traffic accident visible (confidence 0.85)."
+    },
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": 331.86,
+     "end_time_sec": 386.42,
+     "explanation": "traffic accident visible (confidence 0.85)."
+    },
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": 436.52,
+     "end_time_sec": 534.11,
+     "explanation": "traffic accident visible (confidence 0.85)."
+    },
+    {
+     "class_name": "traffic_congestion",
+     "start_time_sec": 380.72,
+     "end_time_sec": 561.44,
+     "explanation": "traffic congestion visible (confidence 0.44)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 9027,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 410440.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 410440.0,
+      "average_time_ms": 410440.0,
+      "p50_time_ms": 410440.0,
+      "p95_time_ms": 410440.0,
+      "max_time_ms": 410440.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E028",
+   "events": [
+    {
+     "class_name": "loitering_or_suspicious_presence",
+     "start_time_sec": 157.23,
+     "end_time_sec": 195.31,
+     "explanation": "loitering or suspicious presence visible (confidence 0.94)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 662,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 20940.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 20940.0,
+      "average_time_ms": 20940.0,
+      "p50_time_ms": 20940.0,
+      "p95_time_ms": 20940.0,
+      "max_time_ms": 20940.0
+     }
+    ]
+   }
+  }
+ ],
+ "model_name": "cascade-appearance-vlm",
+ "run_metadata": {
+  "total_wall_time_ms": 1951310.0,
+  "max_parallel_videos": 1,
+  "hardware": "1x GTX 1650 4GB"
+ },
+ "submission_id": "eval-run-01"
+}

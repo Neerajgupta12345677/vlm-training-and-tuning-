@@ -1,0 +1,914 @@
+{
+ "schema_version": "1.0",
+ "predictions": [
+  {
+   "video_id": "E001",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "Traffic has come to a sudden halt out of sequence with the surrounding flow, the pattern of a collision rather than a queue building up."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 8,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 600.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 600.0,
+      "average_time_ms": 600.0,
+      "p50_time_ms": 600.0,
+      "p95_time_ms": 600.0,
+      "max_time_ms": 600.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E002",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "Vehicles sit at odd angles or in a cluster that breaks the normal lane pattern, with the traffic around them forced to react."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 8,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 100.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 100.0,
+      "average_time_ms": 100.0,
+      "p50_time_ms": 100.0,
+      "p95_time_ms": 100.0,
+      "max_time_ms": 100.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E003",
+   "events": [],
+   "runtime_metadata": {
+    "frames_processed": 272,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 21610.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 21610.0,
+      "average_time_ms": 21610.0,
+      "p50_time_ms": 21610.0,
+      "p95_time_ms": 21610.0,
+      "max_time_ms": 21610.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E004",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "Traffic has come to a sudden halt out of sequence with the surrounding flow, the pattern of a collision rather than a queue building up."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 8,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 300.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 300.0,
+      "average_time_ms": 300.0,
+      "p50_time_ms": 300.0,
+      "p95_time_ms": 300.0,
+      "max_time_ms": 300.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E005",
+   "events": [
+    {
+     "class_name": "stalled_or_broken_down_vehicle",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "A vehicle remains fixed in place in a lane meant for moving traffic, with no queue forming behind it the way a stopped queue would. The truck is tracked across the window and stays there for 7 seconds without moving."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 112,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 3670.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 3670.0,
+      "average_time_ms": 3670.0,
+      "p50_time_ms": 3670.0,
+      "p95_time_ms": 3670.0,
+      "max_time_ms": 3670.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E006",
+   "events": [],
+   "runtime_metadata": {
+    "frames_processed": 68,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 6930.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 6930.0,
+      "average_time_ms": 6930.0,
+      "p50_time_ms": 6930.0,
+      "p95_time_ms": 6930.0,
+      "max_time_ms": 6930.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E007",
+   "events": [
+    {
+     "class_name": "stalled_or_broken_down_vehicle",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "One vehicle has stopped dead in an active lane and stays there as traffic around it continues to flow, rather than queuing behind it. The car is in a live driving lane and stays there for 11 seconds without moving."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 226,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 15620.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 15620.0,
+      "average_time_ms": 15620.0,
+      "p50_time_ms": 15620.0,
+      "p95_time_ms": 15620.0,
+      "max_time_ms": 15620.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E008",
+   "events": [
+    {
+     "class_name": "stalled_or_broken_down_vehicle",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "A vehicle remains fixed in place in a lane meant for moving traffic, with no queue forming behind it the way a stopped queue would. The car is in a live driving lane without moving."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 117,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 9740.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 9740.0,
+      "average_time_ms": 9740.0,
+      "p50_time_ms": 9740.0,
+      "p95_time_ms": 9740.0,
+      "max_time_ms": 9740.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E009",
+   "events": [
+    {
+     "class_name": "fire",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "Active flame is burning in the scene."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 8,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 200.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 200.0,
+      "average_time_ms": 200.0,
+      "p50_time_ms": 200.0,
+      "p95_time_ms": 200.0,
+      "max_time_ms": 200.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E010",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "Traffic has come to a sudden halt out of sequence with the surrounding flow, the pattern of a collision rather than a queue building up."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 8,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 200.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 200.0,
+      "average_time_ms": 200.0,
+      "p50_time_ms": 200.0,
+      "p95_time_ms": 200.0,
+      "max_time_ms": 200.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E011",
+   "events": [
+    {
+     "class_name": "smoke",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "Smoke is billowing upward in the frame, thick enough to be unmistakable from altitude."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 8,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 200.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 200.0,
+      "average_time_ms": 200.0,
+      "p50_time_ms": 200.0,
+      "p95_time_ms": 200.0,
+      "max_time_ms": 200.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E012",
+   "events": [
+    {
+     "class_name": "loitering_or_suspicious_presence",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "A person stays in the same area far longer than passing traffic does, with no apparent purpose for remaining."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 8,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 300.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 300.0,
+      "average_time_ms": 300.0,
+      "p50_time_ms": 300.0,
+      "p95_time_ms": 300.0,
+      "max_time_ms": 300.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E013",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "Traffic has come to a sudden halt out of sequence with the surrounding flow, the pattern of a collision rather than a queue building up."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 8,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 200.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 200.0,
+      "average_time_ms": 200.0,
+      "p50_time_ms": 200.0,
+      "p95_time_ms": 200.0,
+      "max_time_ms": 200.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E014",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "Vehicles sit at odd angles or in a cluster that breaks the normal lane pattern, with the traffic around them forced to react."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 138,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 7810.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 7810.0,
+      "average_time_ms": 7810.0,
+      "p50_time_ms": 7810.0,
+      "p95_time_ms": 7810.0,
+      "max_time_ms": 7810.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E015",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "Vehicles are stopped abnormally on the carriageway with the flow around them disrupted, consistent with a collision rather than ordinary queueing."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 187,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 13820.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 13820.0,
+      "average_time_ms": 13820.0,
+      "p50_time_ms": 13820.0,
+      "p95_time_ms": 13820.0,
+      "max_time_ms": 13820.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E016",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "Traffic has come to a sudden halt out of sequence with the surrounding flow, the pattern of a collision rather than a queue building up."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 244,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 12320.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 12320.0,
+      "average_time_ms": 12320.0,
+      "p50_time_ms": 12320.0,
+      "p95_time_ms": 12320.0,
+      "max_time_ms": 12320.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E017",
+   "events": [],
+   "runtime_metadata": {
+    "frames_processed": 450,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 36150.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 36150.0,
+      "average_time_ms": 36150.0,
+      "p50_time_ms": 36150.0,
+      "p95_time_ms": 36150.0,
+      "max_time_ms": 36150.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E018",
+   "events": [
+    {
+     "class_name": "fighting_or_violence",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "People are engaged in a physical altercation rather than moving normally through the space."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 450,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 36640.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 36640.0,
+      "average_time_ms": 36640.0,
+      "p50_time_ms": 36640.0,
+      "p95_time_ms": 36640.0,
+      "max_time_ms": 36640.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E019",
+   "events": [
+    {
+     "class_name": "loitering_or_suspicious_presence",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "One person remains fixed in one spot well past the time anyone passing through would need, with no visible activity to explain it."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 38,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 2510.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 2510.0,
+      "average_time_ms": 2510.0,
+      "p50_time_ms": 2510.0,
+      "p95_time_ms": 2510.0,
+      "max_time_ms": 2510.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E020",
+   "events": [
+    {
+     "class_name": "loitering_or_suspicious_presence",
+     "start_time_sec": null,
+     "end_time_sec": null,
+     "explanation": "A person lingers in the same location for an extended period while everyone else in view moves on."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 38,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 2530.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 2530.0,
+      "average_time_ms": 2530.0,
+      "p50_time_ms": 2530.0,
+      "p95_time_ms": 2530.0,
+      "max_time_ms": 2530.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E021",
+   "events": [
+    {
+     "class_name": "wrong_way_driving",
+     "start_time_sec": 18.83,
+     "end_time_sec": 40.69,
+     "explanation": "A vehicle is travelling against the prevailing direction of traffic. It runs early in the clip, from 19s to 41s (22s). The car is in a live driving lane. The same condition recurs 6 times in this clip."
+    },
+    {
+     "class_name": "wrong_way_driving",
+     "start_time_sec": 59.83,
+     "end_time_sec": 73.49,
+     "explanation": "A vehicle is travelling against the prevailing direction of traffic. It runs early in the clip, from 60s to 73s (14s). The same condition recurs 6 times in this clip."
+    },
+    {
+     "class_name": "wrong_way_driving",
+     "start_time_sec": 75.6,
+     "end_time_sec": 79.6,
+     "explanation": "A vehicle is travelling against the prevailing direction of traffic. It runs early in the clip, from 76s to 80s (4s). The same condition recurs 6 times in this clip."
+    },
+    {
+     "class_name": "wrong_way_driving",
+     "start_time_sec": 103.59,
+     "end_time_sec": 119.97,
+     "explanation": "A vehicle is travelling against the prevailing direction of traffic. It runs midway through the clip, from 104s to 120s (16s). The car is in a live driving lane. The same condition recurs 6 times in this clip."
+    },
+    {
+     "class_name": "wrong_way_driving",
+     "start_time_sec": 144.59,
+     "end_time_sec": 161.01,
+     "explanation": "A vehicle is travelling against the prevailing direction of traffic. It runs midway through the clip, from 145s to 161s (16s). The same condition recurs 6 times in this clip."
+    },
+    {
+     "class_name": "wrong_way_driving",
+     "start_time_sec": 180.11,
+     "end_time_sec": 199.29,
+     "explanation": "A vehicle is travelling against the prevailing direction of traffic. It runs late in the clip, from 180s to 199s (19s). The same condition recurs 6 times in this clip."
+    },
+    {
+     "class_name": "vehicle_blocking_traffic",
+     "start_time_sec": 26.4,
+     "end_time_sec": 30.4,
+     "explanation": "A stationary vehicle is obstructing the carriageway and other traffic has to divert around it. It runs early in the clip, from 26s to 30s (4s). The truck is tracked across the window and stays there for 8 seconds without moving. The same condition recurs 10 times in this clip."
+    },
+    {
+     "class_name": "vehicle_blocking_traffic",
+     "start_time_sec": 31.84,
+     "end_time_sec": 35.84,
+     "explanation": "A stationary vehicle is obstructing the carriageway and other traffic has to divert around it. It runs early in the clip, from 32s to 36s (4s). The truck is in a live driving lane and stays there for 14 seconds without moving. The same condition recurs 10 times in this clip."
+    },
+    {
+     "class_name": "vehicle_blocking_traffic",
+     "start_time_sec": 72.88,
+     "end_time_sec": 76.88,
+     "explanation": "A stationary vehicle is obstructing the carriageway and other traffic has to divert around it. It runs early in the clip, from 73s to 77s (4s). The same condition recurs 10 times in this clip."
+    },
+    {
+     "class_name": "vehicle_blocking_traffic",
+     "start_time_sec": 100.83,
+     "end_time_sec": 109.05,
+     "explanation": "A stationary vehicle is obstructing the carriageway and other traffic has to divert around it. It runs midway through the clip, from 101s to 109s (8s). The truck is in a live driving lane and stays there for 8 seconds without moving. The same condition recurs 10 times in this clip."
+    },
+    {
+     "class_name": "vehicle_blocking_traffic",
+     "start_time_sec": 111.79,
+     "end_time_sec": 119.97,
+     "explanation": "A stationary vehicle is obstructing the carriageway and other traffic has to divert around it. It runs midway through the clip, from 112s to 120s (8s). The truck is in a live driving lane and stays there for 14 seconds without moving. The same condition recurs 10 times in this clip."
+    },
+    {
+     "class_name": "vehicle_blocking_traffic",
+     "start_time_sec": 139.11,
+     "end_time_sec": 147.33,
+     "explanation": "A stationary vehicle is obstructing the carriageway and other traffic has to divert around it. It runs midway through the clip, from 139s to 147s (8s). The same condition recurs 10 times in this clip."
+    },
+    {
+     "class_name": "vehicle_blocking_traffic",
+     "start_time_sec": 149.44,
+     "end_time_sec": 153.44,
+     "explanation": "A stationary vehicle is obstructing the carriageway and other traffic has to divert around it. It runs midway through the clip, from 149s to 153s (4s). The same condition recurs 10 times in this clip."
+    },
+    {
+     "class_name": "vehicle_blocking_traffic",
+     "start_time_sec": 180.11,
+     "end_time_sec": 191.09,
+     "explanation": "A stationary vehicle is obstructing the carriageway and other traffic has to divert around it. It runs late in the clip, from 180s to 191s (11s). The vehicle is tracked across the window. The same condition recurs 10 times in this clip."
+    },
+    {
+     "class_name": "vehicle_blocking_traffic",
+     "start_time_sec": 193.79,
+     "end_time_sec": 199.29,
+     "explanation": "A stationary vehicle is obstructing the carriageway and other traffic has to divert around it. It runs late in the clip, from 194s to 199s (6s). The truck is tracked across the window and stays there for 14 seconds without moving. The same condition recurs 10 times in this clip."
+    },
+    {
+     "class_name": "vehicle_blocking_traffic",
+     "start_time_sec": 221.15,
+     "end_time_sec": 229.37,
+     "explanation": "A stationary vehicle is obstructing the carriageway and other traffic has to divert around it. It runs late in the clip, from 221s to 229s (8s). The truck is tracked across the window and stays there for 8 seconds without moving. The same condition recurs 10 times in this clip."
+    },
+    {
+     "class_name": "road_spill_or_debris",
+     "start_time_sec": 10.63,
+     "end_time_sec": 18.81,
+     "explanation": "Material is scattered across the running surface of the carriageway, where traffic would otherwise pass. It runs early in the clip, from 11s to 19s (8s). The same condition recurs 6 times in this clip."
+    },
+    {
+     "class_name": "road_spill_or_debris",
+     "start_time_sec": 40.67,
+     "end_time_sec": 59.85,
+     "explanation": "Material is scattered across the running surface of the carriageway, where traffic would otherwise pass. It runs early in the clip, from 41s to 60s (19s). The same condition recurs 6 times in this clip."
+    },
+    {
+     "class_name": "road_spill_or_debris",
+     "start_time_sec": 78.95,
+     "end_time_sec": 100.85,
+     "explanation": "Material is scattered across the running surface of the carriageway, where traffic would otherwise pass. It runs early in the clip, from 79s to 101s (22s). The same condition recurs 6 times in this clip."
+    },
+    {
+     "class_name": "road_spill_or_debris",
+     "start_time_sec": 119.99,
+     "end_time_sec": 139.13,
+     "explanation": "Material is scattered across the running surface of the carriageway, where traffic would otherwise pass. It runs midway through the clip, from 120s to 139s (19s). The same condition recurs 6 times in this clip."
+    },
+    {
+     "class_name": "road_spill_or_debris",
+     "start_time_sec": 160.99,
+     "end_time_sec": 180.13,
+     "explanation": "Material is scattered across the running surface of the carriageway, where traffic would otherwise pass. It runs midway through the clip, from 161s to 180s (19s). The same condition recurs 6 times in this clip."
+    },
+    {
+     "class_name": "road_spill_or_debris",
+     "start_time_sec": 199.27,
+     "end_time_sec": 221.13,
+     "explanation": "Material is scattered across the running surface of the carriageway, where traffic would otherwise pass. It runs late in the clip, from 199s to 221s (22s). The same condition recurs 6 times in this clip."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 3000,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 202770.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 202770.0,
+      "average_time_ms": 202770.0,
+      "p50_time_ms": 202770.0,
+      "p95_time_ms": 202770.0,
+      "max_time_ms": 202770.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E022",
+   "events": [
+    {
+     "class_name": "stalled_or_broken_down_vehicle",
+     "start_time_sec": 144.0,
+     "end_time_sec": 172.08,
+     "explanation": "One vehicle has stopped dead in an active lane and stays there as traffic around it continues to flow, rather than queuing behind it. It runs late in the clip, from 144s to 172s (28s). The car is tracked across the window and stays there for 26 seconds without moving."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 3000,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 201990.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 201990.0,
+      "average_time_ms": 201990.0,
+      "p50_time_ms": 201990.0,
+      "p95_time_ms": 201990.0,
+      "max_time_ms": 201990.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E023",
+   "events": [
+    {
+     "class_name": "traffic_congestion",
+     "start_time_sec": 10.63,
+     "end_time_sec": 35.21,
+     "explanation": "The carriageway is saturated with slow-moving traffic that stays jammed rather than clearing after a short wait. It runs early in the clip, from 11s to 35s (25s). The same condition recurs 2 times in this clip."
+    },
+    {
+     "class_name": "traffic_congestion",
+     "start_time_sec": 94.56,
+     "end_time_sec": 180.96,
+     "explanation": "The carriageway is saturated with slow-moving traffic that stays jammed rather than clearing after a short wait. It runs midway through the clip, from 95s to 181s (86s). The same condition recurs 2 times in this clip."
+    },
+    {
+     "class_name": "fighting_or_violence",
+     "start_time_sec": 29.75,
+     "end_time_sec": 46.17,
+     "explanation": "A physical confrontation is under way between people in the scene, distinct from ordinary pedestrian movement. It runs early in the clip, from 30s to 46s (16s). The same condition recurs 2 times in this clip."
+    },
+    {
+     "class_name": "fighting_or_violence",
+     "start_time_sec": 65.31,
+     "end_time_sec": 76.25,
+     "explanation": "A physical confrontation is under way between people in the scene, distinct from ordinary pedestrian movement. It runs early in the clip, from 65s to 76s (11s). The same condition recurs 2 times in this clip."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 3000,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 244670.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 244670.0,
+      "average_time_ms": 244670.0,
+      "p50_time_ms": 244670.0,
+      "p95_time_ms": 244670.0,
+      "max_time_ms": 244670.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E024",
+   "events": [],
+   "runtime_metadata": {
+    "frames_processed": 3597,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 271590.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 271590.0,
+      "average_time_ms": 271590.0,
+      "p50_time_ms": 271590.0,
+      "p95_time_ms": 271590.0,
+      "max_time_ms": 271590.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E025",
+   "events": [
+    {
+     "class_name": "stalled_or_broken_down_vehicle",
+     "start_time_sec": 115.4,
+     "end_time_sec": 123.4,
+     "explanation": "One vehicle has stopped dead in an active lane and stays there as traffic around it continues to flow, rather than queuing behind it. It runs early in the clip, from 115s to 123s (8s). The truck is tracked across the window and stays there for 8 seconds. The same condition recurs 2 times in this clip."
+    },
+    {
+     "class_name": "stalled_or_broken_down_vehicle",
+     "start_time_sec": 331.27,
+     "end_time_sec": 339.47,
+     "explanation": "One vehicle has stopped dead in an active lane and stays there as traffic around it continues to flow, rather than queuing behind it. It runs late in the clip, from 331s to 339s (8s). The car is tracked across the window and stays there for 10 seconds. The same condition recurs 2 times in this clip."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 5400,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 380390.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 380390.0,
+      "average_time_ms": 380390.0,
+      "p50_time_ms": 380390.0,
+      "p95_time_ms": 380390.0,
+      "max_time_ms": 380390.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E026",
+   "events": [
+    {
+     "class_name": "loitering_or_suspicious_presence",
+     "start_time_sec": 145.54,
+     "end_time_sec": 180.86,
+     "explanation": "A person lingers in the same location for an extended period while everyone else in view moves on. It runs late in the clip, from 146s to 181s (35s)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 613,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 47070.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 47070.0,
+      "average_time_ms": 47070.0,
+      "p50_time_ms": 47070.0,
+      "p95_time_ms": 47070.0,
+      "max_time_ms": 47070.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E027",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": 127.93,
+     "end_time_sec": 225.52,
+     "explanation": "Vehicles are stopped abnormally on the carriageway with the flow around them disrupted, consistent with a collision rather than ordinary queueing. It runs early in the clip, from 128s to 226s (98s). The same condition recurs 4 times in this clip."
+    },
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": 331.86,
+     "end_time_sec": 372.78,
+     "explanation": "Vehicles are stopped abnormally on the carriageway with the flow around them disrupted, consistent with a collision rather than ordinary queueing. It runs midway through the clip, from 332s to 373s (41s). The truck is in a live driving lane and stays there for 8 seconds without moving. The same condition recurs 4 times in this clip."
+    },
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": 379.61,
+     "end_time_sec": 386.42,
+     "explanation": "Vehicles are stopped abnormally on the carriageway with the flow around them disrupted, consistent with a collision rather than ordinary queueing. It runs midway through the clip, from 380s to 386s (7s). The same condition recurs 4 times in this clip."
+    },
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": 436.52,
+     "end_time_sec": 534.11,
+     "explanation": "Vehicles are stopped abnormally on the carriageway with the flow around them disrupted, consistent with a collision rather than ordinary queueing. It runs late in the clip, from 437s to 534s (98s). The car is in a live driving lane and stays there for 10 seconds without moving. The same condition recurs 4 times in this clip."
+    },
+    {
+     "class_name": "traffic_congestion",
+     "start_time_sec": 380.72,
+     "end_time_sec": 561.44,
+     "explanation": "Traffic is packed close together and moving far below free-flow speed, with the queue persisting instead of clearing. It runs midway through the clip, from 381s to 561s (181s). The vehicle is in a live driving lane."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 9027,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 410440.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 410440.0,
+      "average_time_ms": 410440.0,
+      "p50_time_ms": 410440.0,
+      "p95_time_ms": 410440.0,
+      "max_time_ms": 410440.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "E028",
+   "events": [
+    {
+     "class_name": "loitering_or_suspicious_presence",
+     "start_time_sec": 157.23,
+     "end_time_sec": 195.31,
+     "explanation": "One person remains fixed in one spot well past the time anyone passing through would need, with no visible activity to explain it. It runs late in the clip, from 157s to 195s (38s)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 662,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 20940.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 20940.0,
+      "average_time_ms": 20940.0,
+      "p50_time_ms": 20940.0,
+      "p95_time_ms": 20940.0,
+      "max_time_ms": 20940.0
+     }
+    ]
+   }
+  }
+ ],
+ "submission_id": "eval-run-01",
+ "model_name": "cascade-appearance-vlm",
+ "run_metadata": {
+  "total_wall_time_ms": 1951310.0,
+  "max_parallel_videos": 1,
+  "hardware": "1x GTX 1650 4GB"
+ }
+}

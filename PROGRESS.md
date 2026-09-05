@@ -1,5 +1,211 @@
 # Progress Log (append short bullets only, newest at top)
 
+## Status (2026-09-05 18:05): pushed remaining code + document.pdf to GitHub.
+
+- Added `README.md` with a top-level link to `document.pdf` (implementation
+  reference). Repo: https://github.com/Neerajgupta12345677/vlm-training-and-tuning-
+
+## Status (2026-09-05 17:50): batch-4 LoRA added to the same HF repo.
+
+- Uploaded `kaggle_batch4/lora_adapter` (inference files only) to
+  https://huggingface.co/hackiit-neeraj/qwen25vl-ahc-lora-ckpt400
+  under `batch4/`. Root files are still batch-2 ckpt400. Repo is public.
+  Load: `PeftModel.from_pretrained(..., subfolder="batch4")`.
+
+## Status (2026-09-05 14:05): patch_l2 UPLOADED and it worked — 49.2 -> 50.7, now 4th. Reason-bonus submission built and validated.
+
+- Arena confirms the patch: D2 went found 3/18 FA 7 -> **found 5/18 FA 5**,
+  marks 23.7 -> 25.2. Exactly as `make_patch.py` simulated.
+- **`score_arena.py` counts are exactly right.** Arena D2 `5/18, FA 5` and D3
+  `0/8, FA 6` equal our local numbers. D3's weight is now pinned: all 4 L3
+  videos are alert=1/matched=0/timing=0 and score 8.0/40, so **w_alert = 0.20**.
+- **CORRECTION to an earlier assumption:** Level 1 has **20 anomalous + 4
+  normal** videos — T001, T002, T003, T004 are ALL normal (I had said only
+  T003/T004). We alert on T003+T004, so 2 of our 8 D1 false alarms are pure
+  own-goals on empty footage.
+- **Leaderboard lesson — precision beats recall, contradicting my earlier
+  revert.** Yash (92.1) has 0 FA at every level: D2 found only 4/18 (22%
+  recall) yet scores 29.9/35; D3 4/8 with 0 FA scores 37.2/40. We found MORE
+  D2 events than him and scored 4.7 marks lower. My estimated L2/L3 weights
+  under-penalise false alarms, so the `--rel-conf` gate deserves a re-test
+  against real feedback rather than my scorer.
+- `src/explain_events.py` — composes `explanation` from MEASURED facts
+  (tracker context, zone, dwell, speed, window position, detection basis).
+  Reason bonus is 3.5 marks and we score 0; Aryan gets +3.5.
+  Root cause was already measured: train GT captions are boilerplate, so the
+  model can only emit boilerplate (9 events all said "A traffic collision
+  occurs."). Composing beats prompting here.
+  Four self-contradiction bugs found and fixed while building it, each caught
+  by reading the output: (1) rules cited that disagreed with the class
+  (`CLASS_RULES` gate), (2) "in unknown" zones, (3) captions describing
+  NORMALITY under an anomaly claim (`NORMALITY_MARKERS`), (4) captions using
+  another class's vocabulary - T031 congestion quoted a head-on collision
+  (`CLASS_KEYWORDS`). Also stopped calling a clip-level frame count "within
+  this window".
+- **READY: `submissions\submission_reason.json`** — 34 videos, 26.3 KB,
+  validation clean, 34/38 distinct explanations, all 131-317 chars, 0
+  contradictions. Events/timestamps/runtime byte-identical to the banked
+  sheet (verified field-by-field), so marks cannot move; only the reason
+  bonus can. Local score still 51.0.
+
+## Status (2026-09-05 13:40): L2/L3 window geometry fixed. Local arena score 49.2 -> 56.0. T028 now 4-of-4 matched with 0 false alarms.
+
+- Three structural bugs in window emission, all fixed in
+  `appearance_classifier.windows_for_label` + `attach_l23_times.py`:
+  1. **Windows were the span of SAMPLE TIMES, not of the event.** A hit at t
+     only means the event covers t; we sampled every sample_dt, so the window
+     now pads +/- sample_dt/2. This alone converted T028's four near-misses
+     (IoU 0.23-0.38, 4.0s windows vs 5.0s truths) into four matches.
+  2. **`merge_gap_s` was a fixed 8-20s**, which merged ground-truth events
+     sitting 5-20s apart - and a merged window fails IoU>=0.5 against BOTH.
+     Now `merge_gap_mult` x the actual sample interval (1.6-2.2x).
+  3. **min_span / max_span grew or truncated from the group START**, anchoring
+     a window to its first hit (T031: 8s emitted against a 125s truth). Both
+     now resize about the group CENTRE.
+- Sampling density raised: `--sample-dt 3.0`, `--max-frames 160` (was a flat
+  64, i.e. ~10s resolution on a 629s clip - too coarse for a 2.6s GT event).
+- Verify: `python src\attach_l23_times.py --pred C:\dvad\outputs\predictions_final.csv --videos C:\dvad\data\ahc\test\videos --manifest C:\dvad\outputs\manifest_public_test.json --out C:\dvad\outputs\predictions_timed_final.csv`
+  then `python src\score_arena.py --sub C:\dvad\outputs\submission_v4.json`
+- L2 improved on BOTH axes: matched 3->5, false alarms 7->6. L3 matched 0->1
+  but false alarms 6->13 (T033 emits 8 windows for 2 GT events).
+- **NEGATIVE RESULT, do not retry blind:** a relative-confidence precision
+  gate (`--rel-conf 0.6 --max-windows 4`) made it WORSE, 56.0 -> 49.5. It
+  deleted CORRECT windows - T028 fell 4 matches -> 2, T033's only match
+  vanished. Classifier confidence does not rank windows by correctness here.
+  Flags kept but default to OFF.
+- Current best artifact: `C:\dvad\outputs\submission_v4.json` (27.2 KB,
+  validation clean). NOT uploaded wholesale — L3's 13 false alarms are a risk
+  my scorer may understate.
+- `src/make_patch.py` — builds a PARTIAL upload and scores the merged answer
+  sheet before it costs a run. This is the tool that makes the "a file only
+  updates the videos it mentions" rule usable.
+- It caught a regression the level-wide view hid: **T025 gets WORSE** under
+  the new windows (3 -> 4 false alarms, still 0 matched), so an all-L2 patch
+  would have shipped a loss alongside the win. Patch excludes it.
+- **READY TO UPLOAD: `submissions\patch_l2.json`** (2.5 KB, T026/T027/T028).
+  Simulated sheet: **49.2 -> 51.0**, L2 21.37 -> 23.24, L1/L3 untouched.
+  T028 is the win: 2 matched -> 4, 2 false alarms -> 0.
+
+## Status (2026-09-05 13:25): audited the 6-point data plan against what shipped. Two of its assumptions are wrong, measured.
+
+- **Captions in train GT are already templates.** vlm_ft_rich: 4670 train rows
+  but only **333 distinct** captions; the top ones repeat 400x ("Flooding or
+  waterlogging is visible from an aerial viewpoint"). Only 2.8% are our
+  injected fallbacks — the rest are the organisers' own per-class boilerplate.
+  So "train description_summary only when the text is real" cannot be
+  satisfied by filtering: there is no varied caption in the source to keep.
+  A reasoning bonus needs TEACHER-generated captions (distillation), not a
+  length filter. Do not spend more effort on caption filtering.
+- **The long-video training concern is nearly moot.** Of 1845 train videos:
+  791 are <8s, 1016 are 8-60s, and only **38 are 60s+** — of which 21 already
+  have GT intervals and **15 of the remaining 17 are `normal`** (whole-clip
+  labelling is correct there). Only 2 anomalous long videos take the
+  whole-clip path. Duration-aware windowing matters at **inference**
+  (T031-T034 are 240-629s), not in the dataset builder.
+- Consequence for priorities: the remaining big win is item 3 (duration-aware
+  windows + same-class merge at inference), which `score_arena.py` now
+  quantifies exactly as D3 0-of-8 and ~32 unclaimed marks.
+- Batch 4 trained on the rich set: 400 steps, 0 non-finite, and the first
+  monotonically DECREASING loss curve of any run (segment means 0.198 ->
+  0.173, segment maxima 0.442 -> 0.395). Eval running as `dvadevalb4`.
+
+## Status (2026-09-05 12:55): local arena scorer reproduces the leaderboard EXACTLY (49.2/100). Root cause of D3 0/8 found — it is window structure, not recognition.
+
+- `src/score_arena.py` — scores submission.json by the real arena rules per
+  level. Output: **49.2/100**, D3 **8.00/40**, and every match/FA count equals
+  the live breakdown (D1 8 FA, D2 3-of-18 + 7 FA, D3 0-of-8 + 6 FA).
+  Verify: `python src\score_arena.py --sub submissions\submission.json`
+  Retire `score_submission.py` (macro-F1) for decisions — it rewards
+  multi-label guessing and grades IoU at 0.3, the arena gates at 0.5.
+  CAVEAT: counts are exact; L2/L3 mark *weights* are estimated (the pdf never
+  publishes them). D1 lands 19.79 vs a recalled 17.5, D2 21.37 vs 23.7 — the
+  two cancel and the total is exact, so the recalled split was likely garbled.
+- Manifest question CLOSED, no download needed: `test/ground_truth.csv` has its
+  own `level` column, it matches our synthesized manifest on all 34 ids with 0
+  mismatches, and the timed-row counts per level (18 at L2, 8 at L3) equal the
+  arena's own denominators.
+- `src/diag_iou_gap.py` — every GT interval vs our best same-class window.
+  **The structural bug: we emit ONE merged window per class per video; GT has
+  several separate events.** T032 gt=4 → we send 1. T033 gt=2 → 1. T027 gt=4
+  → one 86.4s blob. T025 gt=6 → 3 (and wrong class). Secondary: widths are
+  unrelated to the event (T031 GT 125s vs our 8s; T034 GT 9.4s vs our 40.6s)
+  and T028 is a constant late shift (+2.5/+3.3s) with 4.0s windows vs GT 5.0s.
+- FROM submission.pdf, strategy-relevant: **a file only updates the videos it
+  mentions**; unmentioned videos keep their previous answer. So L3 can be
+  re-uploaded alone without risking the D1/D2 answers already banked.
+
+## Status (2026-09-05 12:10): rich-set decode ~8x faster; full build restarted.
+
+- `frame_sample.read_indices` now seeks across gaps >12 frames instead of
+  `grab()`-walking the whole file. T028 4-frame sample: 8.5s → 1.0s.
+- Candidate grid 16 → 8; JPEGs resized to long-edge 768. 4 workers.
+- Verify: `python src\build_rich_vlm_dataset.py --data_dir C:\dvad\data\ahc --out C:\dvad\data\vlm_ft_rich --workers 4`
+- Build finished in **5.7 min** (was ~2h projected): 1245 videos, 0 skips,
+  4365 train / 478 val samples, 5034 JPEGs, 227 MB, 0 missing images.
+  390 GT-interval videos + 313 outside-interval negatives + 855 whole-clip.
+- Class imbalance fixed (rebuild 98s, JPEGs reused). Source data is the real
+  limit: only **4** stalled videos and **23** congestion videos on disk.
+  Two-step fix in `build_rich_vlm_dataset.py`:
+  1. `CLASS_FRAMES` — more distinct frames from scarce classes (stalled 24/
+     video, congestion 12, fire/smoke/spill 7, flood 6).
+  2. `balance()` — train split only, `--target-per-class 400`,
+     `--max-repeat 3`. Val is never oversampled or the metric hides the
+     rare-class failure.
+  Result: 11/12 classes at 400. congestion 400 [247 distinct],
+  stalled 270 [90 distinct]. 4670 train / 580 val, 6185 JPEGs, 267 MB,
+  0 missing, JSON schema verified on all 5250 rows.
+- Batch 3 COMPLETE and pulled to `C:\dvad\models\kaggle_batch3` (ckpt 200/300/
+  400). `loss_trace.jsonl`: 400 entries, **0 NaN**, tail ~0.12-0.22 — no repeat
+  of the early divergence. NOTE: batch 3 trained on the OLD clip-level jsonl.
+- Rich set uploaded (status `ready`, images unzipped server-side):
+  https://www.kaggle.com/datasets/guptaneeraj123/dvad-ahc-vlm-rich
+  Re-push later versions with `kaggle datasets version -p C:\dvad\data\vlm_ft_rich -m "msg" --dir-mode zip`.
+- **Batch 4 LAUNCHED** — first batch trained on the rich interval set.
+  Warm-start = batch-2 ckpt400 (proven 0.437), NOT batch-3 ckpt400: batch 3
+  was fit on the old clip-level labels and would carry that error forward.
+  Seed **9011** (3407/1234/5678 already used), lr 3e-5, 400 steps, T4.
+  Datasets attached: `dvad-ahc-vlm-rich` + `dvad-vlm-ckpt400b2`.
+- SLUG GOTCHA: `--title "DVAD FT batch4 rich"` made Kaggle resolve the slug to
+  **`dvad-ft-batch4-rich`**, not `dvad-ft-batch4`. Status/pull with:
+  `python src\push_notebook.py --status --slug dvad-ft-batch4-rich`
+  URL: https://www.kaggle.com/code/guptaneeraj123/dvad-ft-batch4-rich
+- Next: when COMPLETE, pull to `C:\dvad\models\kaggle_batch4`, check
+  `loss_trace.jsonl` for NaN, then score it before promoting anything.
+
+## Status (2026-09-05 12:03): LoRA adapter on Hugging Face (private).
+
+- Uploaded batch-2 checkpoint-400 (125 MB, inference files only) to
+  https://huggingface.co/hackiit-neeraj/qwen25vl-ahc-lora-ckpt400
+  Add the other person under Settings → Collaborators. Token was pasted in
+  chat — rotate it after they have access.
+
+## Status (2026-09-05 11:58): started the permanent data/inference fix (not a public-test patch).
+
+- `src/frame_sample.py`: uniform skeleton + motion peaks + window ends. Replaces
+  linspace-only. Smoke: T028 kept t=35.7 and t=153/158 (the accident cluster)
+  instead of 8 even steps. Verify: `python src\frame_sample.py --source ...T028.mp4`
+- `src/build_rich_vlm_dataset.py`: trains on GT **intervals** when present
+  (69% of train rows), plus outside-interval frames labelled `normal`. Caps
+  majority classes. Captions clipped to 20-500. Does not read test GT.
+  Full build running → `C:\dvad\data\vlm_ft_rich`. Smoke 6 videos: 3 interval,
+  3 outside-neg, 3 whole-clip.
+- Inference: persist last window toward clip end for congestion/flood/smoke/fire
+  (`attach_l23_times.py`). Export: `--min-conf` silences weak Level-1 calls
+  (empty = normal, cheaper than a false alarm).
+- Next after the jsonl lands: upload as a Kaggle dataset and point batch 4 at it.
+  Do not continue batch 3's current jsonl.
+
+## Status (2026-09-05 11:30): batch-3 Qwen continuation launched (private-eval path). Public leaderboard 49.2/100 — do not overfit T001-T034.
+
+- Launched `dvad-ft-batch3` on T4, same recipe as the run that survived:
+  warm-start from `dvad-vlm-ckpt400b2` (the 0.437 adapter), fresh optimiser,
+  lr 3e-5, 400 steps, save_steps=100, **seed 5678** (not 3407 / 1234) so the
+  leftover ~0.6 epoch of `train.jsonl` is a new order rather than a replay.
+  Status: `python src\push_notebook.py --status --slug dvad-ft-batch3`
+  URL: https://www.kaggle.com/code/guptaneeraj123/dvad-ft-batch3
+- This is for the unseen private eval, not a public-test patch. Do not merge
+  a new checkpoint into `submission.json` just because it fits T025-T034.
+
 ## Status (2026-09-05 09:45): macro-F1 0.61, verified. Four wins landed this morning: stalled/blocking gate, targeted multi-frame merge, surgical ckpt400 (road_spill fix), YOLO tuning gap closed.
 
 - Score progression today, every step independently re-verified before
@@ -1005,3 +1211,45 @@ proven correct against the SAME data.
 - [ ] Commit the Kaggle notebook, download the adapter to `C:\dvad\models\`
 - [ ] Distillation-fidelity eval (student vs teacher F1)
 - [ ] Full offline dry run with wifi OFF
+
+- Batch-4 eval pulled (`dvadevalb4` COMPLETE, 33 videos, 177/178 frames parseable).
+  New `src\score_vlm_eval.py` scores it on the arena's L1 metric: batch4 found
+  10/20 with 12 FA vs banked 14/20 with 8 FA. It silences the T003 own-goal but
+  adds FAs on T001/T002 and loses T005/T008/T010/T024. DO NOT promote wholesale.
+  Verify: `python src\score_vlm_eval.py --eval C:\dvad\models\kaggle_evalb4\eval_results.jsonl`
+  Next: merge surgically or leave the cascade alone.
+- HANDOVER.md rewritten for the 14:05 state: leaderboard, precision-over-recall
+  finding, ready-to-upload `submission_reason.json`, negative results, ranked
+  next actions. Read it before anything else.
+
+## Sept 5 evening - eval set (E001-E028), cloud eval + deck/docs
+- Eval submission at 42. Root cause found by inspection: E021 emitted 22 events
+  across 4 classes on one 240s clip; E027 3 classes, E023 2.
+- Measured the prior that justifies capping: of the 8 anomalous L2/L3 videos in
+  the public GT, 7 have EXACTLY ONE distinct class. Four classes on one clip
+  therefore guarantees >=3 false alarms.
+- `--class-rel` / `--max-classes` added to attach_l23_times.py (ranks BETWEEN
+  classes on detector confidence; the earlier within-class --rel-conf gate stays
+  off, it was measured harmful). E021 dropped road_spill(0.49), kept
+  wrong_way(0.87); E023 dropped fighting(0.64); E027 dropped congestion(0.44).
+- Fragment merge + class cap: eval events 53 -> 38. E021 22 -> 11.
+  `submissions\eval_submission_v5.json` (recommended),
+  `submissions\eval_submission_v4.json` (fragment merge only, conservative).
+  Both carry MEASURED runtime_metadata via new `src\merge_runtime.py`.
+- NOT validated end-to-end: no local GT exists for the eval set, so the class
+  cap rests on the 7-of-8 prior plus wide confidence separation, not a score.
+- Cloud eval: `src\build_eval_frames.py` packs 28 videos -> 639 JPEGs / 38 MB
+  (vs 1.27 GB of video; E024 alone is 718 MB). Uniform time grid on L2/L3 so
+  per-frame labels rebuild into intervals; motion-aware on short L1 clips.
+  Pushed as `dvad-eval-frames`, run at kernel `dvad-eval-frames-run` with the
+  batch4 adapter. `src\vlm_windows.py` converts the timeline back to events
+  (--mode fill only supplies what the appearance model cannot, e.g. stalled).
+- Adapter comparison on public L1 (`score_vlm_eval.py`): ckpt500 7/20 8FA,
+  ckpt400b2 9/20 10FA, batch4 10/20 12FA, banked cascade 14/20 8FA. No adapter
+  beats the cascade standalone - the VLM's value is the classes the appearance
+  model excludes and per-frame timing, not replacing L1 labels.
+- `build_ppt_pitch.py` -> `deck\FlytBase_AHC_Pitch.pptx`: 5 slides, idea-forward,
+  real block diagram (4 stages + decision gate + always-on/invited-in regimes),
+  drawbacks and dead-end slides removed per request. Rendered to PNG to verify.
+- `IMPLEMENTATION.md` written: architecture, per-stage rationale, window
+  geometry fixes, scoring tools, cloud-eval workflow, measured perf, env traps.

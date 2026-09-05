@@ -130,9 +130,19 @@ CONFIG = dict(
     max_grad_norm = 0.3,     # Unsloth's own recipe uses this for LoRA vision SFT
     lora_r       = 16,
     # CHANGED per batch on purpose. The seed drives the shuffle, and the
-    # divergence was deterministic for a given seed - so batch 2 must NOT
-    # reuse 3407, or it re-creates the same batch ordering that killed v4/v5.
-    seed         = 1234,
+    # divergence was deterministic for a given seed. Batch 1 used 3407 (died),
+    # batch 2 used 1234 (400 clean steps), batch 3 used 5678 (400 clean steps,
+    # 0 NaN). Batch 4 must not reuse any of them, or it replays an order the
+    # model has already fitted. 9011 is a fourth trajectory.
+    #
+    # Batch 4 is also the first batch on DIFFERENT data: the rich interval set
+    # (dvad-ahc-vlm-rich, 4670 balanced samples) instead of the clip-level
+    # jsonl every earlier batch saw. It warm-starts from batch-2 ckpt400 (the
+    # measured-good 0.437 adapter), deliberately NOT batch-3 ckpt400 - batch 3
+    # was fit on the old clip-level labels, where every frame of a 4-minute
+    # accident video was taught the accident class. Carrying that adapter
+    # forward would carry that error forward too.
+    seed         = 9011,
     holdout      = 12,       # by-video val samples to eyeball after training
 )
 for k, v in CONFIG.items():

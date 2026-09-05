@@ -181,6 +181,82 @@ class AppearanceClassifier:
                         "confidence": round(sum(confs) / len(confs), 4)})
         return sorted(out, key=lambda r: r["start_time_sec"])
 
+    def windows_for_label(self, video: str | Path, label: str, n_frames: int = 40,
+                          threshold: float | None = None, merge_gap_s: float = 12.0,
+                          min_span_s: float = 4.0, max_span_frac: float = 0.45,
+                          pad_s: float | None = None) -> list[dict]:
+        """Intervals where a SPECIFIC class is present, not wherever argmax lands.
+
+        `classify_windows` follows the per-frame winner. On a 6-minute congestion
+        clip that winner flickers to `traffic_accident` on individual frames, so
+        the intervals you get are not the class you already decided the video is.
+        Level 2/3 scoring needs the class to be right AND IoU >= 0.5, so the
+        windows have to be of the class we are actually submitting.
+
+        Falls back to a peak-centred interval when no frame clears `threshold`,
+        because an untimed Level-2/3 event is dropped by the exporter and the
+        video is then scored as normal.
+        """
+        frames, times = self._read(Path(video), n_frames)
+        probs = self._probs(frames)
+        if probs.size == 0 or label not in self.classes:
+            return []
+        col = self.classes.index(label)
+        thr = self.threshold if threshold is None else threshold
+        series = [(t, float(row[col])) for t, row in zip(times, probs)]
+        hits = [(t, p) for t, p in series if p >= thr]
+        duration = (times[-1] - times[0]) if len(times) > 1 else (times[0] if times else 0.0)
+        # A hit at time t means "the event covers t", but we only looked every
+        # sample_dt seconds, so the event plausibly extends half a step either
+        # side of the outermost hit. Without this the window is the span of
+        # SAMPLE TIMES rather than of the event, which is systematically too
+        # narrow - the measured cause of T028-style near-misses (our 4.0s
+        # windows against 5.0s truths, IoU 0.23-0.38, just under the gate).
+        sample_dt = (duration / max(len(times) - 1, 1)) if len(times) > 1 else 0.0
+        pad = (sample_dt / 2.0) if pad_s is None else pad_s
+
+        def merge(points: list[tuple[float, float]]) -> list[dict]:
+            if not points:
+                return []
+            groups: list[list[tuple[float, float]]] = [[points[0]]]
+            for t, c in points[1:]:
+                if t - groups[-1][-1][0] <= merge_gap_s:
+                    groups[-1].append((t, c))
+                else:
+                    groups.append([(t, c)])
+            out: list[dict] = []
+            max_span = duration * max_span_frac if duration else 1e9
+            for g in groups:
+                start, end = g[0][0] - pad, g[-1][0] + pad
+                if end - start < min_span_s:
+                    # Grow about the CENTRE, not the start: a single-hit group
+                    # says the event is near that time, not that it begins there.
+                    mid = 0.5 * (start + end)
+                    start, end = mid - min_span_s / 2.0, mid + min_span_s / 2.0
+                if end - start > max_span:
+                    # Trim about the centre too. Truncating from the start
+                    # anchored a 251s cap at the group's first hit and produced
+                    # windows with no relation to the event (T031: 8s emitted
+                    # against a 125s truth).
+                    mid = 0.5 * (start + end)
+                    start, end = mid - max_span / 2.0, mid + max_span / 2.0
+                out.append({"class_name": label, "start_time_sec": round(max(0.0, start), 2),
+                            "end_time_sec": round(end, 2),
+                            "confidence": round(sum(p[1] for p in g) / len(g), 4)})
+            return out
+
+        if hits:
+            return merge(hits)
+
+        # Peak-centred fallback: the class never cleared the threshold frame-wise,
+        # but we already decided (clip-level) that this is the label. Take the
+        # strongest peak and expand while probability stays above half of it.
+        t_peak, p_peak = max(series, key=lambda x: x[1])
+        keep = [(t, p) for t, p in series if p >= max(0.08, 0.5 * p_peak)]
+        if not keep:
+            keep = [(t_peak, p_peak)]
+        return merge(keep)
+
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Stage 1.5 appearance classifier.")
