@@ -1,0 +1,36 @@
+video_id,level,is_anomaly,class_name,start_time_sec,end_time_sec,description_summary
+T001,1,false,normal,,,
+T002,1,false,normal,,,
+T003,1,true,wrong_way_driving,,,wrong way driving identified by the appearance classifier (confidence 0.78).
+T004,1,true,traffic_accident,,,traffic accident identified by the appearance classifier (confidence 0.54).
+T005,1,true,traffic_accident,,,A traffic collision is visible from an aerial viewpoint.
+T006,1,true,traffic_accident,,,A traffic collision occurs.
+T007,1,true,traffic_accident,,,A traffic collision occurs.
+T008,1,true,traffic_congestion,,,traffic congestion identified by the appearance classifier (confidence 0.07).
+T009,1,true,traffic_congestion,,,"A dense stream of traffic moves slowly across the bridge, reflecting a typical heavy-traffic condition where drivers maintain a consistent pace in a congested environment."
+T010,1,true,stalled_or_broken_down_vehicle,,,"stalled_or_broken_down_vehicle identified by the motion tracker (surrounding traffic measured flowing past, not swerving around)."
+T011,1,true,fighting_or_violence,,,"A physical fight, assault, or violent confrontation occurs."
+T012,1,true,fire,,,Active fire and flames are visible from an aerial viewpoint.
+T013,1,true,smoke,,,A large smoke plume is visible from an aerial viewpoint.
+T014,1,true,smoke,,,A large smoke plume is visible from an aerial viewpoint.
+T015,1,true,smoke,,,A large smoke plume is visible from an aerial viewpoint.
+T016,1,true,waterlogging_or_flood,,,Flooding or waterlogging is visible from an aerial viewpoint.
+T017,1,true,waterlogging_or_flood,,,Flooding or waterlogging is visible from an aerial viewpoint.
+T018,1,true,traffic_accident,,,A traffic collision occurs.
+T019,1,true,road_spill_or_debris,,,"A black sedan traveling at high speed loses control and veers off the roadway into a stormwater drain, where it stalls and stalls in the water. The vehicle remains lodged in the drainage for several seconds before eventually coming to a complete stop. This anomaly was caused by the driver's failure to maintain their lane, leading to a loss of traction and a subsequent collision with the roadside barrier."
+T020,1,true,traffic_accident,,,traffic accident identified by the appearance classifier (confidence 0.94).
+T021,1,true,loitering_or_suspicious_presence,,,loitering or suspicious presence identified by the appearance classifier (confidence 0.93).
+T022,1,true,loitering_or_suspicious_presence,,,loitering or suspicious presence identified by the appearance classifier (confidence 0.93).
+T023,1,true,loitering_or_suspicious_presence,,,loitering or suspicious presence identified by the appearance classifier (confidence 0.94).
+T024,1,true,loitering_or_suspicious_presence,,,loitering or suspicious presence identified by the appearance classifier (confidence 0.96).
+T025,1,true,vehicle_blocking_traffic,,,"A white van travels straight in the leftmost lane while a black SUV and a white car move steadily in the adjacent lanes. All three vehicles maintain their respective lanes without any interaction or deviation, adhering to the standard flow of traffic on a multi-lane divided highway where drivers keep a consistent speed and stay within their designated lanes."
+T026,1,true,traffic_accident,,,A traffic collision occurs.
+T027,1,true,traffic_congestion,,,traffic congestion identified by the appearance classifier (confidence 0.88).
+T028,1,true,traffic_accident,,,A traffic collision occurs.
+T029,1,false,normal,,,
+T030,1,false,normal,,,
+T031,1,true,vehicle_blocking_traffic,,,"A white car travels straight through the rightmost lane while a black car moves in the opposite direction in the leftmost lane. Both vehicles maintain steady speeds and stay within their respective lanes, reflecting a standard flow of traffic on a multi-lane divided highway where drivers adhere to lane discipline."
+T031,1,true,traffic_congestion,,,"A white car traveling in the third lane from the left collides head-on with a black SUV moving in the second lane from the right. The force of the impact causes both vehicles to violently deflect toward the right side of the roadway, resulting in a severe T-bone collision. This collision is caused by a failure to maintain a safe following distance, as the white car was traveling faster than its braking capacity could handle the sudden change in trajectory."
+T032,1,true,loitering_or_suspicious_presence,,,loitering or suspicious presence identified by the appearance classifier (confidence 0.85).
+T033,1,true,traffic_accident,,,traffic accident identified by the appearance classifier (confidence 0.61).
+T034,1,true,loitering_or_suspicious_presence,,,loitering or suspicious presence identified by the appearance classifier (confidence 0.75).

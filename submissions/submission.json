@@ -1,0 +1,847 @@
+{
+  "schema_version": "1.0",
+  "predictions": [
+    {
+      "video_id": "T001",
+      "events": [],
+      "runtime_metadata": {
+        "frames_processed": 68,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 5570.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 5570.0,
+            "average_time_ms": 5570.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T002",
+      "events": [],
+      "runtime_metadata": {
+        "frames_processed": 69,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 4530.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 4530.0,
+            "average_time_ms": 4530.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T003",
+      "events": [
+        {
+          "class_name": "wrong_way_driving",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "wrong way driving identified by the appearance classifier (confidence 0.78)."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 210,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 11500.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 11500.0,
+            "average_time_ms": 11500.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T004",
+      "events": [
+        {
+          "class_name": "traffic_accident",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "traffic accident identified by the appearance classifier (confidence 0.54)."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 211,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 10980.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 10980.0,
+            "average_time_ms": 10980.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T005",
+      "events": [
+        {
+          "class_name": "traffic_accident",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "A traffic collision is visible from an aerial viewpoint."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 68,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 4740.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 4740.0,
+            "average_time_ms": 4740.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T006",
+      "events": [
+        {
+          "class_name": "traffic_accident",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "A traffic collision occurs."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 255,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 12410.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 12410.0,
+            "average_time_ms": 12410.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T007",
+      "events": [
+        {
+          "class_name": "traffic_accident",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "A traffic collision occurs."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 340,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 17220.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 17220.0,
+            "average_time_ms": 17220.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T008",
+      "events": [
+        {
+          "class_name": "traffic_congestion",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "traffic congestion identified by the appearance classifier (confidence 0.07)."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 68,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 5170.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 5170.0,
+            "average_time_ms": 5170.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T009",
+      "events": [
+        {
+          "class_name": "traffic_congestion",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "A dense stream of traffic moves slowly across the bridge, reflecting a typical heavy-traffic condition where drivers maintain a consistent pace in a congested environment."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 69,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 7950.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 7950.0,
+            "average_time_ms": 7950.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T010",
+      "events": [
+        {
+          "class_name": "stalled_or_broken_down_vehicle",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "stalled_or_broken_down_vehicle identified by the motion tracker (surrounding traffic measured flowing past, not swerving around)."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 198,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 9730.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 9730.0,
+            "average_time_ms": 9730.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T011",
+      "events": [
+        {
+          "class_name": "fighting_or_violence",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "A physical fight, assault, or violent confrontation occurs."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 168,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 7490.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 7490.0,
+            "average_time_ms": 7490.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T012",
+      "events": [
+        {
+          "class_name": "fire",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "Active fire and flames are visible from an aerial viewpoint."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 70,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 4110.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 4110.0,
+            "average_time_ms": 4110.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T013",
+      "events": [
+        {
+          "class_name": "smoke",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "A large smoke plume is visible from an aerial viewpoint."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 70,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 5200.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 5200.0,
+            "average_time_ms": 5200.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T014",
+      "events": [
+        {
+          "class_name": "smoke",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "A large smoke plume is visible from an aerial viewpoint."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 70,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 4020.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 4020.0,
+            "average_time_ms": 4020.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T015",
+      "events": [
+        {
+          "class_name": "smoke",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "A large smoke plume is visible from an aerial viewpoint."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 70,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 4580.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 4580.0,
+            "average_time_ms": 4580.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T016",
+      "events": [
+        {
+          "class_name": "waterlogging_or_flood",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "Flooding or waterlogging is visible from an aerial viewpoint."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 69,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 4620.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 4620.0,
+            "average_time_ms": 4620.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T017",
+      "events": [
+        {
+          "class_name": "waterlogging_or_flood",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "Flooding or waterlogging is visible from an aerial viewpoint."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 68,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 4380.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 4380.0,
+            "average_time_ms": 4380.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T018",
+      "events": [
+        {
+          "class_name": "traffic_accident",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "A traffic collision occurs."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 166,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 6660.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 6660.0,
+            "average_time_ms": 6660.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T019",
+      "events": [
+        {
+          "class_name": "road_spill_or_debris",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "A black sedan traveling at high speed loses control and veers off the roadway into a stormwater drain, where it stalls and stalls in the water. The vehicle remains lodged in the drainage for several seconds before eventually coming to a complete stop. This anomaly was caused by the driver's failure to maintain their lane, leading to a loss of traction and a subsequent collision with the roadside barrier."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 199,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 10210.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 10210.0,
+            "average_time_ms": 10210.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T020",
+      "events": [
+        {
+          "class_name": "traffic_accident",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "traffic accident identified by the appearance classifier (confidence 0.94)."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 392,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 18470.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 18470.0,
+            "average_time_ms": 18470.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T021",
+      "events": [
+        {
+          "class_name": "loitering_or_suspicious_presence",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "loitering or suspicious presence identified by the appearance classifier (confidence 0.93)."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 38,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 2150.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 2150.0,
+            "average_time_ms": 2150.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T022",
+      "events": [
+        {
+          "class_name": "loitering_or_suspicious_presence",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "loitering or suspicious presence identified by the appearance classifier (confidence 0.93)."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 30,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 1920.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 1920.0,
+            "average_time_ms": 1920.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T023",
+      "events": [
+        {
+          "class_name": "loitering_or_suspicious_presence",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "loitering or suspicious presence identified by the appearance classifier (confidence 0.94)."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 38,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 2900.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 2900.0,
+            "average_time_ms": 2900.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T024",
+      "events": [
+        {
+          "class_name": "loitering_or_suspicious_presence",
+          "start_time_sec": null,
+          "end_time_sec": null,
+          "explanation": "loitering or suspicious presence identified by the appearance classifier (confidence 0.96)."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 30,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 1850.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 1850.0,
+            "average_time_ms": 1850.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T025",
+      "events": [
+        {
+          "class_name": "vehicle_blocking_traffic",
+          "start_time_sec": 147.44,
+          "end_time_sec": 151.44,
+          "explanation": "A white van travels straight in the leftmost lane while a black SUV and a white car move steadily in the adjacent lanes. All three vehicles maintain their respective lanes without any interaction or deviation, adhering to the standard flow of traffic on a multi-lane divided highway where drivers keep a consistent speed and stay within their designated lanes."
+        },
+        {
+          "class_name": "vehicle_blocking_traffic",
+          "start_time_sec": 187.72,
+          "end_time_sec": 191.72,
+          "explanation": "A white van travels straight in the leftmost lane while a black SUV and a white car move steadily in the adjacent lanes. All three vehicles maintain their respective lanes without any interaction or deviation, adhering to the standard flow of traffic on a multi-lane divided highway where drivers keep a consistent speed and stay within their designated lanes."
+        },
+        {
+          "class_name": "vehicle_blocking_traffic",
+          "start_time_sec": 224.32,
+          "end_time_sec": 228.32,
+          "explanation": "A white van travels straight in the leftmost lane while a black SUV and a white car move steadily in the adjacent lanes. All three vehicles maintain their respective lanes without any interaction or deviation, adhering to the standard flow of traffic on a multi-lane divided highway where drivers keep a consistent speed and stay within their designated lanes."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 3000,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 146420.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 146420.0,
+            "average_time_ms": 146420.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T026",
+      "events": [
+        {
+          "class_name": "traffic_accident",
+          "start_time_sec": 12.0,
+          "end_time_sec": 37.6,
+          "explanation": "A traffic collision occurs."
+        },
+        {
+          "class_name": "traffic_accident",
+          "start_time_sec": 107.2,
+          "end_time_sec": 125.48,
+          "explanation": "A traffic collision occurs."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 3001,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 154230.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 154230.0,
+            "average_time_ms": 154230.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T027",
+      "events": [
+        {
+          "class_name": "traffic_congestion",
+          "start_time_sec": 12.0,
+          "end_time_sec": 98.4,
+          "explanation": "traffic congestion identified by the appearance classifier (confidence 0.88)."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 3000,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 182470.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 182470.0,
+            "average_time_ms": 182470.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T028",
+      "events": [
+        {
+          "class_name": "traffic_accident",
+          "start_time_sec": 30.28,
+          "end_time_sec": 34.28,
+          "explanation": "A traffic collision occurs."
+        },
+        {
+          "class_name": "traffic_accident",
+          "start_time_sec": 92.52,
+          "end_time_sec": 96.52,
+          "explanation": "A traffic collision occurs."
+        },
+        {
+          "class_name": "traffic_accident",
+          "start_time_sec": 151.08,
+          "end_time_sec": 155.08,
+          "explanation": "A traffic collision occurs."
+        },
+        {
+          "class_name": "traffic_accident",
+          "start_time_sec": 213.32,
+          "end_time_sec": 217.32,
+          "explanation": "A traffic collision occurs."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 3000,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 113770.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 113770.0,
+            "average_time_ms": 113770.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T029",
+      "events": [],
+      "runtime_metadata": {
+        "frames_processed": 3597,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 170020.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 170020.0,
+            "average_time_ms": 170020.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T030",
+      "events": [],
+      "runtime_metadata": {
+        "frames_processed": 0,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 0,
+            "average_time_ms": 0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T031",
+      "events": [
+        {
+          "class_name": "traffic_congestion",
+          "start_time_sec": 177.4,
+          "end_time_sec": 185.4,
+          "explanation": "A white car traveling in the third lane from the left collides head-on with a black SUV moving in the second lane from the right. The force of the impact causes both vehicles to violently deflect toward the right side of the roadway, resulting in a severe T-bone collision. This collision is caused by a failure to maintain a safe following distance, as the white car was traveling faster than its braking capacity could handle the sudden change in trajectory."
+        },
+        {
+          "class_name": "traffic_congestion",
+          "start_time_sec": 234.0,
+          "end_time_sec": 242.0,
+          "explanation": "A white car traveling in the third lane from the left collides head-on with a black SUV moving in the second lane from the right. The force of the impact causes both vehicles to violently deflect toward the right side of the roadway, resulting in a severe T-bone collision. This collision is caused by a failure to maintain a safe following distance, as the white car was traveling faster than its braking capacity could handle the sudden change in trajectory."
+        },
+        {
+          "class_name": "vehicle_blocking_traffic",
+          "start_time_sec": 234.0,
+          "end_time_sec": 238.0,
+          "explanation": "A white car travels straight through the rightmost lane while a black car moves in the opposite direction in the leftmost lane. Both vehicles maintain steady speeds and stay within their respective lanes, reflecting a standard flow of traffic on a multi-lane divided highway where drivers adhere to lane discipline."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 5400,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 219900.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 219900.0,
+            "average_time_ms": 219900.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T032",
+      "events": [
+        {
+          "class_name": "loitering_or_suspicious_presence",
+          "start_time_sec": 14.93,
+          "end_time_sec": 48.21,
+          "explanation": "loitering or suspicious presence identified by the appearance classifier (confidence 0.85)."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 577,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 21270.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 21270.0,
+            "average_time_ms": 21270.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T033",
+      "events": [
+        {
+          "class_name": "traffic_accident",
+          "start_time_sec": 49.38,
+          "end_time_sec": 151.25,
+          "explanation": "traffic accident identified by the appearance classifier (confidence 0.61)."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 9423,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 375860.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 375860.0,
+            "average_time_ms": 375860.0
+          }
+        ]
+      }
+    },
+    {
+      "video_id": "T034",
+      "events": [
+        {
+          "class_name": "loitering_or_suspicious_presence",
+          "start_time_sec": 18.67,
+          "end_time_sec": 59.31,
+          "explanation": "loitering or suspicious presence identified by the appearance classifier (confidence 0.75)."
+        }
+      ],
+      "runtime_metadata": {
+        "frames_processed": 353,
+        "chunks_processed": 1,
+        "end_to_end_internal_time_ms": 12400.0,
+        "model_runtimes": [
+          {
+            "model_name": "appearance-classifier",
+            "call_count": 1,
+            "total_time_ms": 12400.0,
+            "average_time_ms": 12400.0
+          }
+        ]
+      }
+    }
+  ],
+  "submission_id": "cascade-run-01",
+  "model_name": "cascade-appearance-vlm",
+  "run_metadata": {
+    "total_wall_time_ms": 1564700.0,
+    "hardware": "1x GTX 1650 4GB"
+  }
+}

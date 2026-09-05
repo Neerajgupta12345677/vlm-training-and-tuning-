@@ -1,0 +1,107 @@
+{
+ "schema_version": "1.0",
+ "predictions": [
+  {
+   "video_id": "T026",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": 10.63,
+     "end_time_sec": 40.69,
+     "explanation": "A traffic collision occurs."
+    },
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": 106.31,
+     "end_time_sec": 125.49,
+     "explanation": "A traffic collision occurs."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 3001,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 154230.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 154230.0,
+      "average_time_ms": 154230.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "T027",
+   "events": [
+    {
+     "class_name": "traffic_congestion",
+     "start_time_sec": 76.8,
+     "end_time_sec": 163.2,
+     "explanation": "traffic congestion identified by the appearance classifier (confidence 0.88)."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 3000,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 182470.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 182470.0,
+      "average_time_ms": 182470.0
+     }
+    ]
+   }
+  },
+  {
+   "video_id": "T028",
+   "events": [
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": 29.75,
+     "end_time_sec": 35.21,
+     "explanation": "A traffic collision occurs."
+    },
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": 89.91,
+     "end_time_sec": 95.37,
+     "explanation": "A traffic collision occurs."
+    },
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": 150.07,
+     "end_time_sec": 155.53,
+     "explanation": "A traffic collision occurs."
+    },
+    {
+     "class_name": "traffic_accident",
+     "start_time_sec": 210.19,
+     "end_time_sec": 215.69,
+     "explanation": "A traffic collision occurs."
+    }
+   ],
+   "runtime_metadata": {
+    "frames_processed": 3000,
+    "chunks_processed": 1,
+    "end_to_end_internal_time_ms": 113770.0,
+    "model_runtimes": [
+     {
+      "model_name": "appearance-classifier",
+      "call_count": 1,
+      "total_time_ms": 113770.0,
+      "average_time_ms": 113770.0
+     }
+    ]
+   }
+  }
+ ],
+ "submission_id": "cascade-run-01",
+ "model_name": "cascade-appearance-vlm",
+ "run_metadata": {
+  "total_wall_time_ms": 1564700.0,
+  "hardware": "1x GTX 1650 4GB"
+ }
+}
