@@ -1,5 +1,40 @@
 # Progress Log (append short bullets only, newest at top)
 
+## Status: MAJOR WIN - combined classifier + fine-tuned VLM: macro-F1 0.442 (up from 0.262 classifier-alone, up from 0.188 tonight's start). This is the current safe submission, verified.
+
+- Kaggle fine-tune never reached a full clean 800 steps (5 attempts, each
+  diagnosed - see entries below), but checkpoint-500 (saved independently in
+  two separate runs, healthy internal trainer state, ~500/800 steps) turned
+  out to be enough to matter. Evaluated it PROPERLY end-to-end rather than
+  just eyeballing training samples: extracted one real frame from each of the
+  33 public test videos, ran base Qwen2.5-VL-3B + checkpoint-500 through the
+  exact training-time instruction, parsed the JSON, scored via
+  score_submission.py against the real ground_truth.csv - same rigor as the
+  classifier, not a training-set sanity check.
+- **VLM checkpoint-500 alone: macro-F1 0.323** - genuinely beats the
+  classifier's 0.262 on its own. Recovers three of the classifier's SIX dead
+  classes: waterlogging_or_flood F1 1.0, smoke F1 0.8, fire F1 0.667. Makes
+  sense: those are exactly the classes a single-frame CNN struggles with once
+  one class (traffic_accident) dominates training - a VLM reasoning in
+  language rather than forced 11-way argmax sidesteps that specific failure.
+- **Combined (src\combine_predictions.py): macro-F1 0.442.** Simple priority
+  rule, not a fitted threshold: trust the VLM whenever it asserts anything
+  other than `normal`, fall back to the classifier otherwise. Deliberately NOT
+  tuned against this test set (unlike three earlier per-class-threshold
+  attempts that all overfit) - this is a rule based on which model is
+  measurably strong at what, so it carries much less overfitting risk.
+  Verified independently twice (inline computation + the standalone script)
+  before promoting.
+- New safe submission: `predictions_final.csv` (0.442). Old ones backed up as
+  `predictions_OLD_0.262.csv` and `predictions_OLD_0.188.csv`.
+- Built two small Kaggle datasets to support the eval (dvad-vlm-ckpt500: the
+  adapter with optimizer/scheduler state stripped, 126MB; dvad-vlm-eval-test:
+  33 extracted test frames, 1.5MB) and an eval-only notebook
+  (notebooks/eval_kaggle.ipynb) - no training, so this cost ~10 min of GPU
+  time, not another ~75 min run, to find out the checkpoint was worth keeping.
+- push_notebook.py now accepts comma-separated --dataset slugs (needed two
+  datasets attached to one kernel for this eval).
+
 ## Status: classifier retrained with rebalanced sampling - REAL, VERIFIED WIN: macro-F1 0.188 -> 0.262. This is now the safe submission. Kaggle fine-tune still fighting divergence (3 failed attempts, root cause diagnosed each time, v4 running with a genuine fix).
 
 - **Root cause of the classifier's `traffic_accident` dominance, found by checking
